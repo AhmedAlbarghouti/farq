@@ -141,17 +141,6 @@ If both `claude` and `opencode` are installed and nothing is configured, farq us
 
 Progress → **stderr**. Artifact → **stdout**.
 
-## Publishing notes (maintainers)
-
-Tag-triggered publish via GitHub Actions (npm provenance):
-
-```bash
-git tag v0.0.2
-git push origin v0.0.2
-```
-
-Requires repo secret `NPM_TOKEN`. Package name: `@ahmedalbarghouti/farq`.
-
 ## Repository ops
 
 - **CI** runs on every PR and on pushes to `main` (test + build + `--help` smoke).
