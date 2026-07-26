@@ -152,6 +152,12 @@ git push origin v0.0.1
 
 Requires repo secret `NPM_TOKEN`. Package name: `farq`.
 
+## Repository ops
+
+- **CI** runs on every PR and on pushes to `main` (test + build + `--help` smoke).
+- **`main` is protected** — changes go through PRs; the `CI / test` check must pass.
+- **Releases** are tag-triggered: create `v0.0.1` (or later) after merge; the publish workflow needs a repo secret named `NPM_TOKEN` (npm automation/granular token with publish rights).
+
 ## Roadmap
 
 - Harder GitHub image upload (`user-attachments` URLs)
