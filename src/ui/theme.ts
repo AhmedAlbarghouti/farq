@@ -1,7 +1,7 @@
 import pc from "picocolors";
 
 export function brand(): string {
-  return `${pc.dim("فرق")} ${pc.dim("farq")}`;
+  return pc.dim("farq");
 }
 
 export function accent(text: string): string {
