@@ -1,5 +1,6 @@
 import type { ChangeSummary } from "../schema.js";
 import { truncateTitle, GITHUB_TITLE_MAX } from "../title.js";
+import { isHostedImageUrl, LOCAL_IMAGE_NOTE } from "../tools.js";
 
 const EMOJI: Record<string, string> = {
   feature: "\u2728",
@@ -37,8 +38,10 @@ export function renderPr(options: RenderPrOptions): string {
     out.push("");
     const alt = options.imageAlt ?? "before / after";
     out.push(`![${alt}](${options.imagePath})`);
-    out.push("");
-    out.push("_Local image path - attach the file when pasting into GitHub if it does not render._");
+    if (!isHostedImageUrl(options.imagePath)) {
+      out.push("");
+      out.push(LOCAL_IMAGE_NOTE);
+    }
   }
 
   out.push("");

@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { execa } from "execa";
 import type { ChangeSummary } from "./schema.js";
 import { fillPrTemplate, findPrTemplate } from "./template.js";
+import { resolveGh } from "./tools.js";
 
 const GH_TIMEOUT = 60_000;
 
@@ -16,20 +17,28 @@ export type OpenPrResult =
       warning?: string;
     };
 
+async function gh(
+  cwd: string,
+  args: string[],
+  options: { reject?: boolean } = {},
+) {
+  return execa(resolveGh(), args, {
+    cwd,
+    timeout: GH_TIMEOUT,
+    reject: options.reject ?? true,
+  });
+}
+
 export async function resolveDefaultBranch(cwd: string): Promise<string> {
   try {
-    const { stdout } = await execa(
-      "gh",
-      [
-        "repo",
-        "view",
-        "--json",
-        "defaultBranchRef",
-        "--jq",
-        ".defaultBranchRef.name",
-      ],
-      { cwd, timeout: GH_TIMEOUT, reject: true },
-    );
+    const { stdout } = await gh(cwd, [
+      "repo",
+      "view",
+      "--json",
+      "defaultBranchRef",
+      "--jq",
+      ".defaultBranchRef.name",
+    ]);
     if (stdout.trim()) return stdout.trim();
   } catch {
     // fall through
@@ -63,22 +72,18 @@ export async function fetchRecentPrTitles(
   limit = 20,
 ): Promise<string[]> {
   try {
-    const { stdout } = await execa(
-      "gh",
-      [
-        "pr",
-        "list",
-        "--state",
-        "merged",
-        "--limit",
-        String(limit),
-        "--json",
-        "title",
-        "--jq",
-        ".[].title",
-      ],
-      { cwd, timeout: GH_TIMEOUT, reject: true },
-    );
+    const { stdout } = await gh(cwd, [
+      "pr",
+      "list",
+      "--state",
+      "merged",
+      "--limit",
+      String(limit),
+      "--json",
+      "title",
+      "--jq",
+      ".[].title",
+    ]);
     return stdout
       .split("\n")
       .map((s) => s.trim())
@@ -93,10 +98,10 @@ export async function findExistingPr(
   cwd: string,
 ): Promise<{ number: number; url: string } | null> {
   try {
-    const { stdout, exitCode } = await execa(
-      "gh",
+    const { stdout, exitCode } = await gh(
+      cwd,
       ["pr", "view", "--json", "number,url"],
-      { cwd, timeout: GH_TIMEOUT, reject: false },
+      { reject: false },
     );
     if (exitCode !== 0 || !stdout.trim()) return null;
     const parsed = JSON.parse(stdout) as { number?: number; url?: string };
@@ -154,25 +159,17 @@ export async function openPullRequest(options: {
   try {
     const existing = await findExistingPr(cwd);
     if (existing) {
-      await execa(
-        "gh",
-        [
-          "pr",
-          "edit",
-          String(existing.number),
-          "--title",
-          title,
-          "--body-file",
-          bodyFile,
-        ],
-        { cwd, timeout: GH_TIMEOUT, reject: true },
-      );
+      await gh(cwd, [
+        "pr",
+        "edit",
+        String(existing.number),
+        "--title",
+        title,
+        "--body-file",
+        bodyFile,
+      ]);
       try {
-        await execa("gh", ["pr", "view", "--web"], {
-          cwd,
-          timeout: GH_TIMEOUT,
-          reject: false,
-        });
+        await gh(cwd, ["pr", "view", "--web"], { reject: false });
       } catch {
         // non-fatal
       }
@@ -184,17 +181,16 @@ export async function openPullRequest(options: {
       };
     }
 
-    const created = await execa(
-      "gh",
-      ["pr", "create", "--title", title, "--body-file", bodyFile],
-      { cwd, timeout: GH_TIMEOUT, reject: true },
-    );
+    const created = await gh(cwd, [
+      "pr",
+      "create",
+      "--title",
+      title,
+      "--body-file",
+      bodyFile,
+    ]);
     try {
-      await execa("gh", ["pr", "view", "--web"], {
-        cwd,
-        timeout: GH_TIMEOUT,
-        reject: false,
-      });
+      await gh(cwd, ["pr", "view", "--web"], { reject: false });
     } catch {
       // non-fatal
     }
@@ -220,36 +216,34 @@ export async function uploadPrImage(
 ): Promise<string> {
   const tag = `farq-assets-${branch.replace(/[^a-zA-Z0-9._-]/g, "-").slice(0, 40)}`;
   try {
-    await execa("gh", ["release", "delete", tag, "--yes", "--cleanup-tag"], {
-      cwd,
-      timeout: GH_TIMEOUT,
+    await gh(cwd, ["release", "delete", tag, "--yes", "--cleanup-tag"], {
       reject: false,
     });
   } catch {
     // ok if missing
   }
 
-  await execa(
-    "gh",
-    [
-      "release",
-      "create",
-      tag,
-      imagePath,
-      "--title",
-      `farq assets (${branch})`,
-      "--notes",
-      "Auto-uploaded by farq for PR description embedding.",
-      "--prerelease",
-    ],
-    { cwd, timeout: GH_TIMEOUT, reject: true },
-  );
+  await gh(cwd, [
+    "release",
+    "create",
+    tag,
+    imagePath,
+    "--title",
+    `farq assets (${branch})`,
+    "--notes",
+    "Auto-uploaded by farq for PR description embedding.",
+    "--prerelease",
+  ]);
 
-  const { stdout } = await execa(
-    "gh",
-    ["release", "view", tag, "--json", "assets", "--jq", ".assets[0].url"],
-    { cwd, timeout: GH_TIMEOUT, reject: true },
-  );
+  const { stdout } = await gh(cwd, [
+    "release",
+    "view",
+    tag,
+    "--json",
+    "assets",
+    "--jq",
+    ".assets[0].url",
+  ]);
 
   const url = stdout.trim();
   if (!url) throw new Error("no asset URL returned");

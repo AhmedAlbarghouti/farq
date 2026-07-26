@@ -1,6 +1,10 @@
-import { existsSync } from "node:fs";
 import { execa } from "execa";
 import { platform } from "node:os";
+import { join } from "node:path";
+import {
+  resolveExecutable,
+  ToolNotFoundError,
+} from "../tools.js";
 
 const TIMEOUT_MS = 30_000;
 
@@ -12,20 +16,17 @@ export class ChromeError extends Error {
 }
 
 export function resolveChrome(env: NodeJS.ProcessEnv = process.env): string {
-  if (env.CHROME_PATH) {
-    if (existsSync(env.CHROME_PATH)) return env.CHROME_PATH;
-    throw new ChromeError(
-      `CHROME_PATH not found: ${env.CHROME_PATH}`,
-    );
-  }
+  const local = env.LOCALAPPDATA ?? "";
+  const pf = env.ProgramFiles ?? "C:\\Program Files";
+  const pf86 = env["ProgramFiles(x86)"] ?? "C:\\Program Files (x86)";
 
-  const candidates =
+  const extraPaths =
     platform() === "win32"
       ? [
-          "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
-          "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe",
-          `${env.LOCALAPPDATA}\\Google\\Chrome\\Application\\chrome.exe`,
-          "C:\\Program Files\\Chromium\\Application\\chrome.exe",
+          join(pf, "Google", "Chrome", "Application", "chrome.exe"),
+          join(pf86, "Google", "Chrome", "Application", "chrome.exe"),
+          join(local, "Google", "Chrome", "Application", "chrome.exe"),
+          join(pf, "Chromium", "Application", "chrome.exe"),
         ]
       : platform() === "darwin"
         ? [
@@ -39,13 +40,30 @@ export function resolveChrome(env: NodeJS.ProcessEnv = process.env): string {
             "/usr/bin/chromium-browser",
           ];
 
-  for (const c of candidates) {
-    if (c && existsSync(c)) return c;
+  try {
+    return resolveExecutable(
+      [
+        "google-chrome",
+        "google-chrome-stable",
+        "chromium",
+        "chromium-browser",
+        "chrome",
+        "chrome.exe",
+      ],
+      {
+        env,
+        envKey: "CHROME_PATH",
+        extraPaths,
+        notFoundMessage:
+          "Chrome/Chromium not found — install Google Chrome or set CHROME_PATH",
+      },
+    );
+  } catch (err) {
+    if (err instanceof ToolNotFoundError) {
+      throw new ChromeError(err.message);
+    }
+    throw err;
   }
-
-  throw new ChromeError(
-    "Chrome/Chromium not found — install Google Chrome or set CHROME_PATH",
-  );
 }
 
 export type ScreenshotOptions = {
