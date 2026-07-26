@@ -10,10 +10,8 @@ export async function complete(
   const baseArgs = ["-p", "--output-format", "json", "--max-turns", "1"];
   if (options.model) baseArgs.push("--model", options.model);
 
-  const attempts = [
-    [...baseArgs, "--allowedTools", ""],
-    [...baseArgs],
-  ];
+  // Prefer without allowedTools first — empty allowedTools hangs/fails on some versions.
+  const attempts = [[...baseArgs], [...baseArgs, "--allowedTools", ""]];
 
   let lastErr: unknown;
   for (const args of attempts) {
@@ -21,41 +19,56 @@ export async function complete(
       const result = await execa("claude", args, {
         input: prompt,
         timeout: TIMEOUT_MS,
-        reject: true,
+        reject: false,
         stdout: "pipe",
         stderr: "pipe",
       });
-      return parseClaudeOutput(result.stdout);
-    } catch (err) {
-      const e = err as {
-        timedOut?: boolean;
-        stderr?: string;
-        message?: string;
-        exitCode?: number;
-      };
-      if (e.timedOut) {
+
+      if (result.timedOut) {
         throw new Error(
-          "claude did not respond — check that it's authenticated",
+          "claude did not respond — check that it's authenticated (`claude` login)",
         );
       }
-      // Retry without allowedTools if that flag was rejected
-      if (
-        args.includes("--allowedTools") &&
-        /allowedTools|unknown option|unexpected/i.test(
-          `${e.stderr ?? ""} ${e.message ?? ""}`,
-        )
-      ) {
-        lastErr = err;
-        continue;
+
+      const text = (result.stdout || result.stderr || "").trim();
+      if (!text && result.exitCode !== 0) {
+        throw new Error(
+          `claude failed (exit ${result.exitCode}): ${(result.stderr || "no output").trim()}`,
+        );
       }
-      throw new Error(
-        `claude failed: ${(e.stderr || e.message || "unknown error").trim()}`,
-      );
+
+      try {
+        return parseClaudeOutput(text);
+      } catch (parseErr) {
+        // Retry next arg set only when allowedTools looks unsupported
+        if (
+          args.includes("--allowedTools") &&
+          /allowedTools|unknown option|unexpected/i.test(
+            `${result.stderr ?? ""} ${text}`,
+          )
+        ) {
+          lastErr = parseErr;
+          continue;
+        }
+        throw parseErr;
+      }
+    } catch (err) {
+      const e = err as { timedOut?: boolean; message?: string };
+      if (e.timedOut || /did not respond/i.test(e.message ?? "")) {
+        throw new Error(
+          "claude did not respond — check that it's authenticated (`claude` login)",
+        );
+      }
+      lastErr = err;
+      if (!args.includes("--allowedTools")) {
+        // try with allowedTools only if first attempt was a flag-related failure
+        const msg = e.message ?? "";
+        if (/unknown option|allowedTools/i.test(msg)) continue;
+        throw err instanceof Error ? err : new Error(String(err));
+      }
     }
   }
-  throw lastErr instanceof Error
-    ? lastErr
-    : new Error("claude failed");
+  throw lastErr instanceof Error ? lastErr : new Error("claude failed");
 }
 
 function parseClaudeOutput(stdout: string): string {
@@ -66,12 +79,23 @@ function parseClaudeOutput(stdout: string): string {
       error?: string;
     };
     if (envelope.is_error) {
-      throw new Error(envelope.error || "claude returned is_error: true");
+      const detail = envelope.result || envelope.error || "claude returned is_error: true";
+      if (/authenticat|401|OAuth/i.test(detail)) {
+        throw new Error(
+          `claude authentication failed — run \`claude\` and sign in again. (${detail})`,
+        );
+      }
+      throw new Error(detail);
     }
     if (typeof envelope.result === "string") return envelope.result;
   } catch (err) {
-    if (err instanceof Error && err.message.includes("is_error")) throw err;
-    // fall through — maybe raw text
+    if (err instanceof Error && /claude |authenticat|is_error/i.test(err.message)) {
+      throw err;
+    }
+    // fall through — maybe raw text / not JSON
+  }
+  if (!stdout.trim()) {
+    throw new Error("claude returned empty output");
   }
   return stdout;
 }
