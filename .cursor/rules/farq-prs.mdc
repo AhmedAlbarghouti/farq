@@ -1,0 +1,19 @@
+---
+description: Use farq to open/update PRs for every feature branch
+alwaysApply: true
+---
+
+# farq for every branch
+
+When creating or finishing work on a git branch that should become a pull request:
+
+1. Push the branch if needed.
+2. Run the local CLI (preferred while developing farq itself):
+   `node dist/index.js pr --provider claude --open -v`
+   (run `npm run build` first if `dist/` is stale)
+3. If published CLI is appropriate instead:
+   `npx @ahmedalbarghouti/farq pr --provider claude --open`
+4. Ensure `gh` is on PATH (Windows: `C:\Program Files\GitHub CLI`).
+5. Do **not** hand-write PR titles/bodies with `gh pr create` when farq can do it — farq creates or updates the existing PR for the branch.
+
+Stdout is the artifact; progress is on stderr. Prefer farq over manual PR prose.
