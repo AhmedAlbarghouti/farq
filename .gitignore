@@ -1,0 +1,6 @@
+docs/
+node_modules/
+dist/
+.farq/
+*.log
+.DS_Store
