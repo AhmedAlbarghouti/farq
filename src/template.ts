@@ -2,6 +2,7 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { ChangeSummary } from "./schema.js";
 import { truncateTitle, GITHUB_TITLE_MAX } from "./title.js";
+import { stripLocalImageNote } from "./tools.js";
 
 export function findPrTemplate(cwd: string): string | null {
   const single = join(cwd, ".github", "pull_request_template.md");
@@ -44,6 +45,7 @@ export function fillPrTemplate(options: {
           ")\n\n" +
           body;
       }
+      body = stripLocalImageNote(body);
     }
     return { title, body };
   }
@@ -74,6 +76,7 @@ export function fillPrTemplate(options: {
         options.imageUrl +
         ")\n";
     }
+    body = stripLocalImageNote(body);
   }
 
   return { title, body };

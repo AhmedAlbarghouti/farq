@@ -4,6 +4,14 @@ vi.mock("execa", () => ({
   execa: vi.fn(),
 }));
 
+vi.mock("../src/tools.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../src/tools.js")>();
+  return {
+    ...actual,
+    resolveGh: () => "gh",
+  };
+});
+
 import { execa } from "execa";
 import { openPullRequest } from "../src/open-pr.js";
 import { FAKE_SUMMARY } from "../src/providers/index.js";

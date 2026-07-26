@@ -13,7 +13,17 @@ describe("renderers", () => {
     const first = out.split("\n")[0];
     expect(first).toBe(FAKE_SUMMARY.headline);
     expect(out).toContain("](.farq/before-after.png)");
+    expect(out).toContain("Local image path");
     expect(out).toContain("### Changes");
+  });
+
+  it("pr omits local-path note when image is a hosted URL", () => {
+    const out = renderPr({
+      summary: FAKE_SUMMARY,
+      imagePath: "https://example.com/before-after.png",
+    });
+    expect(out).toContain("](https://example.com/before-after.png)");
+    expect(out).not.toContain("Local image path");
   });
 
   it("slack uses mrkdwn emoji lines and no image", () => {

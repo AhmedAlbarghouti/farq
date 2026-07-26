@@ -37,4 +37,16 @@ describe("fillPrTemplate", () => {
     });
     expect(body).toContain("https://example.com/a.png");
   });
+
+  it("strips local image note when substituting hosted URL", () => {
+    const { body } = fillPrTemplate({
+      template: null,
+      summary: FAKE_SUMMARY,
+      bodyMarkdown:
+        "### Before / After\n\n![x](.farq/before-after.png)\n\n_Local image path - attach the file when pasting into GitHub if it does not render._\n\n### Changes\n",
+      imageUrl: "https://github.com/x/y/releases/download/t/a.png",
+    });
+    expect(body).toContain("https://github.com/x/y/releases/download/t/a.png");
+    expect(body).not.toContain("Local image path");
+  });
 });
