@@ -61,4 +61,20 @@ describe("fillPrTemplate", () => {
     expect(body).toContain("https://example.com/a.png");
     expect(body).not.toContain("AppData");
   });
+
+  it("substitutes multiple local images with hosted URLs in order", () => {
+    const { body } = fillPrTemplate({
+      template: null,
+      summary: FAKE_SUMMARY,
+      bodyMarkdown:
+        "### Visuals\n\n#### A\n\n![A](/tmp/a.png)\n\n#### B\n\n![B](/tmp/b.png)\n",
+      images: [
+        { url: "https://ex/a.png", title: "A" },
+        { url: "https://ex/b.png", title: "B" },
+      ],
+    });
+    expect(body).toContain("https://ex/a.png");
+    expect(body).toContain("https://ex/b.png");
+    expect(body).not.toContain("/tmp/");
+  });
 });

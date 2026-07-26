@@ -13,10 +13,17 @@ const EMOJI: Record<string, string> = {
   security: "\uD83D\uDD12",
 };
 
+export type PrImage = {
+  path: string;
+  title?: string;
+};
+
 export type RenderPrOptions = {
   summary: ChangeSummary;
+  /** @deprecated prefer images */
   imagePath?: string | null;
   imageAlt?: string;
+  images?: PrImage[];
 };
 
 export function renderPr(options: RenderPrOptions): string {
@@ -32,13 +39,26 @@ export function renderPr(options: RenderPrOptions): string {
     out.push(overflow);
   }
 
-  if (options.imagePath) {
-    out.push("");
-    out.push("### Before / After");
-    out.push("");
-    const alt = options.imageAlt ?? "before / after";
-    out.push(`![${alt}](${options.imagePath})`);
-    if (!isHostedImageUrl(options.imagePath)) {
+  const images = normalizeImages(options);
+  if (images.length > 0) {
+    const anyLocal = images.some((img) => !isHostedImageUrl(img.path));
+    if (images.length === 1) {
+      out.push("");
+      out.push("### Before / After");
+      out.push("");
+      const alt = images[0]!.title ?? options.imageAlt ?? "before / after";
+      out.push(`![${alt}](${images[0]!.path})`);
+    } else {
+      out.push("");
+      out.push("### Visuals");
+      for (const img of images) {
+        out.push("");
+        out.push(`#### ${img.title ?? "Before / After"}`);
+        out.push("");
+        out.push(`![${img.title ?? "before / after"}](${img.path})`);
+      }
+    }
+    if (anyLocal) {
       out.push("");
       out.push(LOCAL_IMAGE_NOTE);
     }
@@ -66,4 +86,12 @@ export function renderPr(options: RenderPrOptions): string {
   }
 
   return `${title}\n\n${out.join("\n").trim()}\n`;
+}
+
+function normalizeImages(options: RenderPrOptions): PrImage[] {
+  if (options.images && options.images.length > 0) return options.images;
+  if (options.imagePath) {
+    return [{ path: options.imagePath, title: options.imageAlt }];
+  }
+  return [];
 }

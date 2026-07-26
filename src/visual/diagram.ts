@@ -15,15 +15,17 @@ export async function generateDiagram(options: {
   outDir: string;
   model?: string;
   log?: (msg: string) => void;
+  filePrefix?: string;
 }): Promise<DiagramResult> {
   const prompt = `You create a conceptual before/after flowchart as one self-contained HTML document.
 
 This is the fallback visual when a pixel UI mockup is not appropriate (API, logic, docs, config, etc.). Prefer a small flowchart or labeled before/after boxes that explain the change at a glance.
 
 Rules:
-- Pure HTML/CSS, no libraries, no external requests, system fonts.
+- Pure HTML/CSS, no libraries, no external requests except optional @import fonts from fonts.googleapis.com or fonts.bunny.net.
 - Two labeled columns (Before / After) with simple boxes/arrows (flowchart style).
 - Concept-level only: field/endpoint/step names OK. NO code, NO syntax, NO JSON dumps, NO walls of text.
+- Visual craft: one clear composition, expressive typography, subtle atmospheric background (gradient or soft pattern), high contrast, generous spacing. Avoid purple-gradient clichés, neon glow, and cluttered sticker UI.
 - Include a small corner badge text: generated preview
 - If you truly cannot produce a faithful conceptual visual from the diff alone, return {"feasible": false, "reason": "..."}. Prefer a simple flowchart over declining.
 
@@ -51,7 +53,8 @@ ${options.diffText}
   }
 
   mkdirSync(options.outDir, { recursive: true });
-  const htmlPath = join(options.outDir, "diagram.html");
+  const prefix = options.filePrefix ?? "";
+  const htmlPath = join(options.outDir, `${prefix}diagram.html`);
   writeFileSync(htmlPath, json.html, "utf8");
   return { feasible: true, htmlPath };
 }

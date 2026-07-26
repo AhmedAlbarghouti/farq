@@ -19,32 +19,34 @@ export function findPrTemplate(cwd: string): string | null {
   return null;
 }
 
+export type TemplateImage = {
+  url: string;
+  title?: string;
+};
+
 export function fillPrTemplate(options: {
   template: string | null;
   summary: ChangeSummary;
   bodyMarkdown: string;
+  /** @deprecated prefer images */
   imageUrl?: string | null;
+  images?: TemplateImage[];
 }): { title: string; body: string } {
   const { title, overflow } = truncateTitle(
     options.summary.headline,
     GITHUB_TITLE_MAX,
   );
 
+  const images = normalizeTemplateImages(options);
+
   let body = options.template?.trim() || "";
   if (!body) {
     body = options.bodyMarkdown;
     if (overflow) body = overflow + "\n\n" + body;
-    if (options.imageUrl) {
-      // Swap any non-http(s) image target (cache path, .farq/, etc.).
-      const re = /!\[([^\]]*)\]\((?!https?:\/\/)[^)]+\)/;
-      if (re.test(body)) {
-        body = body.replace(re, "![$1](" + options.imageUrl + ")");
-      } else {
-        body =
-          "### Before / After\n\n![before / after](" +
-          options.imageUrl +
-          ")\n\n" +
-          body;
+    if (images.length > 0) {
+      body = replaceLocalImages(body, images);
+      if (!hasMarkdownImage(body)) {
+        body = renderImageMarkdown(images) + "\n\n" + body;
       }
       body = stripLocalImageNote(body);
     }
@@ -64,23 +66,59 @@ export function fillPrTemplate(options: {
 
   if (overflow) body = overflow + "\n\n" + body;
 
-  if (options.imageUrl) {
-    if (/before\s*\/\s*after|screenshots?/i.test(body)) {
+  if (images.length > 0) {
+    const md = renderImageMarkdown(images);
+    if (/before\s*\/\s*after|screenshots?|visuals?/i.test(body)) {
       body = fillSection(
         body,
-        /before\s*\/\s*after|screenshots?/i,
-        "![before / after](" + options.imageUrl + ")",
+        /before\s*\/\s*after|screenshots?|visuals?/i,
+        md.replace(/^###[^\n]+\n+/, "").trim(),
       );
     } else {
-      body +=
-        "\n\n### Before / After\n\n![before / after](" +
-        options.imageUrl +
-        ")\n";
+      body += "\n\n" + md + "\n";
     }
     body = stripLocalImageNote(body);
   }
 
   return { title, body };
+}
+
+function normalizeTemplateImages(options: {
+  imageUrl?: string | null;
+  images?: TemplateImage[];
+}): TemplateImage[] {
+  if (options.images && options.images.length > 0) return options.images;
+  if (options.imageUrl) return [{ url: options.imageUrl }];
+  return [];
+}
+
+function hasMarkdownImage(body: string): boolean {
+  return /!\[[^\]]*\]\([^)]+\)/.test(body);
+}
+
+function replaceLocalImages(body: string, images: TemplateImage[]): string {
+  let i = 0;
+  return body.replace(
+    /!\[([^\]]*)\]\((?!https?:\/\/)[^)]+\)/g,
+    (_m, alt: string) => {
+      const img = images[Math.min(i, images.length - 1)]!;
+      i += 1;
+      return `![${alt || img.title || "before / after"}](${img.url})`;
+    },
+  );
+}
+
+function renderImageMarkdown(images: TemplateImage[]): string {
+  if (images.length === 1) {
+    const alt = images[0]!.title ?? "before / after";
+    return `### Before / After\n\n![${alt}](${images[0]!.url})`;
+  }
+  const parts = ["### Visuals"];
+  for (const img of images) {
+    const alt = img.title ?? "before / after";
+    parts.push("", `#### ${alt}`, "", `![${alt}](${img.url})`);
+  }
+  return parts.join("\n");
 }
 
 function fillSection(template: string, heading: RegExp, content: string): string {

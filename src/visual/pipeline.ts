@@ -1,20 +1,27 @@
 import { copyFileSync, mkdirSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { basename, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import type { ChangeSummary } from "../schema.js";
 import type { Provider } from "../providers/index.js";
-import type { GatherDiffResult } from "../git.js";
+import type { DiffFile, GatherDiffResult } from "../git.js";
 import { gatherVisualFileContents } from "../git.js";
 import { decideGate } from "./gate.js";
 import { generateMockup } from "./mockup.js";
 import { generateDiagram } from "./diagram.js";
+import { clusterVisualTopics, type VisualTopic } from "./cluster.js";
 import { defaultOutDir } from "../paths.js";
 import { composeBeforeAfter, ChromeError } from "./compose.js";
 import { screenshotHtml, resolveChrome } from "./chrome.js";
 
+export type VisualImage = {
+  path: string;
+  title: string;
+};
+
 export type VisualPipelineResult = {
   imagePath: string | null;
   images: string[];
+  imageMeta: VisualImage[];
   softDegraded: boolean;
   warning?: string;
 };
@@ -44,10 +51,9 @@ export async function runVisualPipeline(
   };
 
   if (options.noImages) {
-    return { imagePath: null, images: [], softDegraded: false };
+    return emptyResult(false);
   }
 
-  // Manual screenshots skip generation
   if (options.before && options.after) {
     try {
       mkdirSync(outDir, { recursive: true });
@@ -61,18 +67,13 @@ export async function runVisualPipeline(
         beforePath: beforeCopy,
         afterPath: afterCopy,
         badge: "before / after",
+        outFileName: "visual-1.png",
       });
-      return { imagePath: composed, images: [composed], softDegraded: false };
+      return singleResult(composed, "before / after");
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       throw new ChromeError(msg);
     }
-  }
-
-  const gate = decideGate(options.diff.files);
-  vlog(`visual gate: ${gate}`);
-  if (gate === "none") {
-    return { imagePath: null, images: [], softDegraded: false };
   }
 
   try {
@@ -80,81 +81,187 @@ export async function runVisualPipeline(
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     return {
-      imagePath: null,
-      images: [],
-      softDegraded: true,
+      ...emptyResult(true),
       warning: msg,
     };
   }
 
-  try {
-    if (gate === "mockup") {
-      const files = await gatherVisualFileContents(
+  const topics = clusterVisualTopics(options.summary);
+  vlog(`visual topics: ${topics.length}`);
+  if (topics.length === 0) {
+    return emptyResult(false);
+  }
+
+  const imageMeta: VisualImage[] = [];
+  const warnings: string[] = [];
+
+  for (const topic of topics) {
+    try {
+      const path = await renderTopic({
+        topic,
         cwd,
-        options.diff.files,
-        options.diff.baseRef,
-      );
-      const mockup = await generateMockup({
-        provider: options.provider,
-        summary: options.summary,
-        files,
         outDir,
-        model: options.modelCheap,
-        log: vlog,
+        summary: options.summary,
+        diff: options.diff,
+        provider: options.provider,
+        modelCheap: options.modelCheap,
+        vlog,
       });
-      if (mockup.feasible) {
-        const beforePng = join(outDir, "before.png");
-        const afterPng = join(outDir, "after.png");
-        await screenshotHtml({
-          url: pathToFileURL(mockup.beforePath).href,
-          outPath: beforePng,
-          width: mockup.viewport?.width,
-          height: mockup.viewport?.height,
-        });
-        await screenshotHtml({
-          url: pathToFileURL(mockup.afterPath).href,
-          outPath: afterPng,
-          width: mockup.viewport?.width,
-          height: mockup.viewport?.height,
-        });
-        const composed = await composeBeforeAfter({
-          cwd,
-          outDir,
-          beforePath: beforePng,
-          afterPath: afterPng,
-          badge: "generated preview",
-        });
-        return { imagePath: composed, images: [composed], softDegraded: false };
+      if (path) {
+        imageMeta.push({ path, title: topic.title });
       }
-      vlog(`mockup infeasible: ${mockup.reason}; trying diagram`);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      warnings.push(`topic "${topic.title}": ${msg}`);
+      vlog(`topic failed: ${msg}`);
     }
+  }
 
-    // diagram path (gate=diagram or mockup downgrade)
-    const diagram = await generateDiagram({
-      provider: options.provider,
-      summary: options.summary,
-      diffText: options.diff.diffText,
-      outDir,
-      model: options.modelCheap,
-      log: vlog,
-    });
-    if (!diagram.feasible) {
-      vlog(`diagram infeasible: ${diagram.reason}`);
-      return { imagePath: null, images: [], softDegraded: false };
-    }
-    const outPng = join(outDir, "before-after.png");
-    await screenshotHtml({
-      url: pathToFileURL(diagram.htmlPath).href,
-      outPath: outPng,
-    });
-    return { imagePath: outPng, images: [outPng], softDegraded: false };
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
+  if (imageMeta.length === 0) {
     return {
-      imagePath: null,
-      images: [],
-      softDegraded: true,
-      warning: msg,
+      ...emptyResult(warnings.length > 0),
+      warning: warnings[0],
     };
   }
+
+  return {
+    imagePath: imageMeta[0]!.path,
+    images: imageMeta.map((i) => i.path),
+    imageMeta,
+    softDegraded: warnings.length > 0,
+    warning: warnings.length > 0 ? warnings.join("; ") : undefined,
+  };
+}
+
+async function renderTopic(options: {
+  topic: VisualTopic;
+  cwd: string;
+  outDir: string;
+  summary: ChangeSummary;
+  diff: GatherDiffResult;
+  provider: Provider;
+  modelCheap?: string;
+  vlog: (msg: string) => void;
+}): Promise<string | null> {
+  const { topic, cwd, outDir, provider, modelCheap, vlog } = options;
+  const prefix = `visual-${topic.id}-`;
+  const stem = `visual-${topic.id}`;
+  const topicSummary = scopeSummary(options.summary, topic);
+  const topicFiles = filterDiffFiles(options.diff.files, topic.files);
+
+  const gate =
+    topicFiles.length > 0
+      ? decideGate(topicFiles)
+      : decideGate(options.diff.files);
+  vlog(`visual gate [${topic.id} ${topic.title}]: ${gate}`);
+  if (gate === "none") return null;
+
+  if (gate === "mockup") {
+    const files = await gatherVisualFileContents(
+      cwd,
+      topicFiles.length > 0 ? topicFiles : options.diff.files,
+      options.diff.baseRef,
+    );
+    const mockup = await generateMockup({
+      provider,
+      summary: topicSummary,
+      files,
+      outDir,
+      model: modelCheap,
+      log: vlog,
+      filePrefix: prefix,
+    });
+    if (mockup.feasible) {
+      const beforePng = join(outDir, `${prefix}before.png`);
+      const afterPng = join(outDir, `${prefix}after.png`);
+      await screenshotHtml({
+        url: pathToFileURL(mockup.beforePath).href,
+        outPath: beforePng,
+        width: mockup.viewport?.width,
+        height: mockup.viewport?.height,
+      });
+      await screenshotHtml({
+        url: pathToFileURL(mockup.afterPath).href,
+        outPath: afterPng,
+        width: mockup.viewport?.width,
+        height: mockup.viewport?.height,
+      });
+      return composeBeforeAfter({
+        cwd,
+        outDir,
+        beforePath: beforePng,
+        afterPath: afterPng,
+        badge: "generated preview",
+        outFileName: `${stem}.png`,
+      });
+    }
+    vlog(`mockup infeasible [${topic.id}]: ${mockup.reason}; trying diagram`);
+  }
+
+  const diagram = await generateDiagram({
+    provider,
+    summary: topicSummary,
+    diffText: scopeDiffText(options.diff.diffText, topic.files),
+    outDir,
+    model: modelCheap,
+    log: vlog,
+    filePrefix: prefix,
+  });
+  if (!diagram.feasible) {
+    vlog(`diagram infeasible [${topic.id}]: ${diagram.reason}`);
+    return null;
+  }
+  const outPng = join(outDir, `${stem}.png`);
+  await screenshotHtml({
+    url: pathToFileURL(diagram.htmlPath).href,
+    outPath: outPng,
+  });
+  return outPng;
+}
+
+function scopeSummary(
+  summary: ChangeSummary,
+  topic: VisualTopic,
+): ChangeSummary {
+  return {
+    ...summary,
+    headline: topic.title.slice(0, 140),
+    overview: topic.items.map((i) => i.description).join(" "),
+    items: topic.items,
+  };
+}
+
+function filterDiffFiles(files: DiffFile[], topicFiles: string[]): DiffFile[] {
+  if (topicFiles.length === 0) return files;
+  const set = new Set(topicFiles.map((f) => f.replaceAll("\\", "/")));
+  return files.filter((f) => set.has(f.path.replaceAll("\\", "/")));
+}
+
+function scopeDiffText(diffText: string, topicFiles: string[]): string {
+  if (topicFiles.length === 0 || !diffText) return diffText;
+  // Keep hunks whose path header mentions a topic file; else full diff.
+  const norms = topicFiles.map((f) => f.replaceAll("\\", "/"));
+  const parts = diffText.split(/(?=^diff --git )/m);
+  const kept = parts.filter((p) =>
+    norms.some((f) => p.includes(f) || p.includes(basename(f))),
+  );
+  return kept.length > 0 ? kept.join("") : diffText;
+}
+
+function emptyResult(soft: boolean): VisualPipelineResult {
+  return {
+    imagePath: null,
+    images: [],
+    imageMeta: [],
+    softDegraded: soft,
+  };
+}
+
+function singleResult(path: string, title: string): VisualPipelineResult {
+  return {
+    imagePath: path,
+    images: [path],
+    imageMeta: [{ path, title }],
+    softDegraded: false,
+  };
 }

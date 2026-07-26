@@ -1,5 +1,5 @@
 import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { tmpdir } from "node:os";
 import { execa } from "execa";
 import type { ChangeSummary } from "./schema.js";
@@ -18,6 +18,7 @@ export type OpenPrResult =
       title: string;
       body: string;
       imageUrl?: string | null;
+      imageUrls?: string[];
     };
 
 /** Prerelease tag used to host a branch's composed PNG. */
@@ -127,6 +128,8 @@ export async function openPullRequest(options: {
   summary: ChangeSummary;
   bodyMarkdown: string;
   imagePath?: string | null;
+  imagePaths?: string[];
+  imageTitles?: string[];
 }): Promise<OpenPrResult> {
   const cwd = options.cwd;
   const branch = await currentBranch(cwd);
@@ -139,14 +142,21 @@ export async function openPullRequest(options: {
     };
   }
 
-  let imageUrl: string | null = null;
+  const paths =
+    options.imagePaths && options.imagePaths.length > 0
+      ? options.imagePaths
+      : options.imagePath
+        ? [options.imagePath]
+        : [];
+
+  let imageUrls: string[] = [];
   let warning: string | undefined;
 
-  if (options.imagePath) {
+  if (paths.length > 0) {
     try {
-      imageUrl = await uploadPrImage(cwd, options.imagePath, branch);
+      imageUrls = await uploadPrImages(cwd, paths, branch);
     } catch (err) {
-      warning = `Image upload failed — attach manually: ${options.imagePath} (${
+      warning = `Image upload failed — attach manually: ${paths.join(", ")} (${
         err instanceof Error ? err.message : String(err)
       })`;
     }
@@ -157,7 +167,11 @@ export async function openPullRequest(options: {
     template,
     summary: options.summary,
     bodyMarkdown: options.bodyMarkdown,
-    imageUrl,
+    imageUrl: imageUrls[0] ?? null,
+    images: imageUrls.map((url, i) => ({
+      url,
+      title: options.imageTitles?.[i],
+    })),
   });
 
   const dir = mkdtempSync(join(tmpdir(), "farq-pr-"));
@@ -188,7 +202,8 @@ export async function openPullRequest(options: {
         warning,
         title,
         body,
-        imageUrl,
+        imageUrl: imageUrls[0] ?? null,
+        imageUrls,
       };
     }
 
@@ -212,7 +227,8 @@ export async function openPullRequest(options: {
       warning,
       title,
       body,
-      imageUrl,
+      imageUrl: imageUrls[0] ?? null,
+      imageUrls,
     };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
@@ -284,12 +300,26 @@ export async function pruneOrphanedFarqAssets(
   return deleted;
 }
 
-/** Best-effort: prerelease asset URL for the PNG. */
+/** Best-effort: prerelease asset URL for one PNG. */
 export async function uploadPrImage(
   cwd: string,
   imagePath: string,
   branch: string,
 ): Promise<string> {
+  const urls = await uploadPrImages(cwd, [imagePath], branch);
+  const url = urls[0];
+  if (!url) throw new Error("no asset URL returned");
+  return url;
+}
+
+/** Best-effort: upload many PNGs to one prerelease; URLs in input order. */
+export async function uploadPrImages(
+  cwd: string,
+  imagePaths: string[],
+  branch: string,
+): Promise<string[]> {
+  if (imagePaths.length === 0) return [];
+
   const tag = assetTagForBranch(branch);
   try {
     await gh(cwd, ["release", "delete", tag, "--yes", "--cleanup-tag"], {
@@ -303,7 +333,7 @@ export async function uploadPrImage(
     "release",
     "create",
     tag,
-    imagePath,
+    ...imagePaths,
     "--title",
     `farq assets (${branch})`,
     "--notes",
@@ -317,13 +347,21 @@ export async function uploadPrImage(
     tag,
     "--json",
     "assets",
-    "--jq",
-    ".assets[0].url",
   ]);
 
-  const url = stdout.trim();
-  if (!url) throw new Error("no asset URL returned");
+  const parsed = JSON.parse(stdout) as {
+    assets?: Array<{ name?: string; url?: string }>;
+  };
+  const assets = parsed.assets ?? [];
+  const urls = imagePaths.map((p) => {
+    const name = basename(p);
+    const hit = assets.find((a) => a.name === name);
+    if (!hit?.url) {
+      throw new Error(`no asset URL for ${name}`);
+    }
+    return hit.url;
+  });
 
   await pruneOrphanedFarqAssets(cwd, tag);
-  return url;
+  return urls;
 }

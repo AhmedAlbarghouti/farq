@@ -3,7 +3,6 @@ import { join } from "node:path";
 import { extractJson } from "../extract-json.js";
 import type { ChangeSummary } from "../schema.js";
 import type { Provider } from "../providers/index.js";
-import type { DiffFile } from "../git.js";
 
 export type MockupResult =
   | {
@@ -21,14 +20,17 @@ export async function generateMockup(options: {
   outDir: string;
   model?: string;
   log?: (msg: string) => void;
+  /** Prefix for written HTML files (e.g. visual-1-). */
+  filePrefix?: string;
 }): Promise<MockupResult> {
   const prompt = `You create faithful before/after HTML mockups from a git diff.
 
 Rules:
-- The diff contains exact before/after markup/styles. Emit two fully self-contained HTML documents (inline CSS, no external requests, system fonts) that render this exact markup with these exact styles.
+- The diff contains exact before/after markup/styles. Emit two fully self-contained HTML documents (inline CSS, no external requests) that render this exact markup with these exact styles.
 - Stub only the minimum: container width, placeholder text where dynamic props appear (realistic neutral placeholders).
 - Do not invent UI that is not present in the code.
 - Never show raw code listings.
+- Visual craft: one clear composition, strong typographic hierarchy, purposeful (non-default) web fonts via @import from fonts.googleapis.com or fonts.bunny.net if helpful, atmospheric background (subtle gradient or pattern — not flat single-color), generous whitespace, high contrast for text. No purple-on-white clichés, no glow spam, no floating badge stickers on the mockup itself.
 - If you cannot render faithfully, return {"feasible": false, "reason": "..."}.
 
 Return JSON only:
@@ -66,8 +68,9 @@ ${options.files
   }
 
   mkdirSync(options.outDir, { recursive: true });
-  const beforePath = join(options.outDir, "before.html");
-  const afterPath = join(options.outDir, "after.html");
+  const prefix = options.filePrefix ?? "";
+  const beforePath = join(options.outDir, `${prefix}before.html`);
+  const afterPath = join(options.outDir, `${prefix}after.html`);
   writeFileSync(beforePath, json.before_html, "utf8");
   writeFileSync(afterPath, json.after_html, "utf8");
   return {

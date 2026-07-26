@@ -114,6 +114,7 @@ async function run(type: OutputType, opts: SharedOpts): Promise<number> {
 
   let imagePath: string | null = null;
   let images: string[] = [];
+  let imageMeta: Array<{ path: string; title: string }> = [];
 
   if (imagesEnabled || (opts.before && opts.after)) {
     const visSpin = ui.stage("visual", provider.name);
@@ -133,6 +134,7 @@ async function run(type: OutputType, opts: SharedOpts): Promise<number> {
       });
       imagePath = visual.imagePath;
       images = visual.images;
+      imageMeta = visual.imageMeta;
       if (visual.warning) {
         visSpin.succeed("visuals skipped");
         ui.note(visual.warning);
@@ -152,12 +154,13 @@ async function run(type: OutputType, opts: SharedOpts): Promise<number> {
     }
   }
 
-  const relImage =
-    imagePath != null ? displayImageRef(cwd, imagePath) : null;
+  const prImages = (imageMeta.length > 0 ? imageMeta : images.map((p) => ({ path: p, title: "before / after" }))).map(
+    (img) => ({ path: displayImageRef(cwd, img.path), title: img.title }),
+  );
 
   let artifact = "";
   if (type === "pr") {
-    artifact = renderPr({ summary, imagePath: relImage });
+    artifact = renderPr({ summary, images: prImages });
   } else if (type === "slack") {
     artifact = renderSlack(summary);
   } else {
@@ -177,6 +180,8 @@ async function run(type: OutputType, opts: SharedOpts): Promise<number> {
           ? artifact.split("\n\n").slice(1).join("\n\n")
           : artifact,
         imagePath,
+        imagePaths: images,
+        imageTitles: imageMeta.map((m) => m.title),
       });
       if (result.skipped) {
         openSpin.succeed(result.reason);
