@@ -77,7 +77,7 @@ farq pr --open
 1. Reads `.github` PR template if present and fills known sections  
 2. Infers title style from recent merged PR titles when `gh` works  
 3. Best-effort uploads the composed image as a prerelease asset and embeds the URL  
-4. Runs `gh pr create` and opens the PR in the browser  
+4. Creates the PR with `gh pr create`, or **updates** title/body with `gh pr edit` if one already exists for the branch, then opens it in the browser  
 
 On the default branch (`main` / `master` / repo default), `--open` skips create and still prints the artifact. Titles are capped at GitHub's **256** character limit (overflow goes into the body).
 

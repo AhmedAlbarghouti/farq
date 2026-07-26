@@ -9,13 +9,25 @@ const GH_TIMEOUT = 60_000;
 
 export type OpenPrResult =
   | { skipped: true; reason: string }
-  | { skipped: false; url?: string; warning?: string };
+  | {
+      skipped: false;
+      action: "created" | "updated";
+      url?: string;
+      warning?: string;
+    };
 
 export async function resolveDefaultBranch(cwd: string): Promise<string> {
   try {
     const { stdout } = await execa(
       "gh",
-      ["repo", "view", "--json", "defaultBranchRef", "--jq", ".defaultBranchRef.name"],
+      [
+        "repo",
+        "view",
+        "--json",
+        "defaultBranchRef",
+        "--jq",
+        ".defaultBranchRef.name",
+      ],
       { cwd, timeout: GH_TIMEOUT, reject: true },
     );
     if (stdout.trim()) return stdout.trim();
@@ -76,6 +88,27 @@ export async function fetchRecentPrTitles(
   }
 }
 
+/** Existing open PR for the current branch, if any. */
+export async function findExistingPr(
+  cwd: string,
+): Promise<{ number: number; url: string } | null> {
+  try {
+    const { stdout, exitCode } = await execa(
+      "gh",
+      ["pr", "view", "--json", "number,url"],
+      { cwd, timeout: GH_TIMEOUT, reject: false },
+    );
+    if (exitCode !== 0 || !stdout.trim()) return null;
+    const parsed = JSON.parse(stdout) as { number?: number; url?: string };
+    if (typeof parsed.number === "number" && typeof parsed.url === "string") {
+      return { number: parsed.number, url: parsed.url };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 export async function openPullRequest(options: {
   cwd: string;
   summary: ChangeSummary;
@@ -119,7 +152,39 @@ export async function openPullRequest(options: {
   writeFileSync(bodyFile, body, "utf8");
 
   try {
-    await execa(
+    const existing = await findExistingPr(cwd);
+    if (existing) {
+      await execa(
+        "gh",
+        [
+          "pr",
+          "edit",
+          String(existing.number),
+          "--title",
+          title,
+          "--body-file",
+          bodyFile,
+        ],
+        { cwd, timeout: GH_TIMEOUT, reject: true },
+      );
+      try {
+        await execa("gh", ["pr", "view", "--web"], {
+          cwd,
+          timeout: GH_TIMEOUT,
+          reject: false,
+        });
+      } catch {
+        // non-fatal
+      }
+      return {
+        skipped: false,
+        action: "updated",
+        url: existing.url,
+        warning,
+      };
+    }
+
+    const created = await execa(
       "gh",
       ["pr", "create", "--title", title, "--body-file", bodyFile],
       { cwd, timeout: GH_TIMEOUT, reject: true },
@@ -133,10 +198,15 @@ export async function openPullRequest(options: {
     } catch {
       // non-fatal
     }
-    return { skipped: false, warning };
+    return {
+      skipped: false,
+      action: "created",
+      url: created.stdout?.trim() || undefined,
+      warning,
+    };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    throw new Error(`gh pr create failed: ${msg}`);
+    throw new Error(`gh pr create/edit failed: ${msg}`);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -177,15 +247,7 @@ export async function uploadPrImage(
 
   const { stdout } = await execa(
     "gh",
-    [
-      "release",
-      "view",
-      tag,
-      "--json",
-      "assets",
-      "--jq",
-      ".assets[0].url",
-    ],
+    ["release", "view", tag, "--json", "assets", "--jq", ".assets[0].url"],
     { cwd, timeout: GH_TIMEOUT, reject: true },
   );
 
