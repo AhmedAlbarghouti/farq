@@ -1,0 +1,45 @@
+{
+  "name": "farq",
+  "version": "0.0.1",
+  "description": "Turn git branch changes into paste-ready PR/Slack updates with optional before/after visuals",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "bin": {
+    "farq": "./dist/index.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "git",
+    "pr",
+    "cli",
+    "diff",
+    "changelog"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/AhmedAlbarghouti/farq.git"
+  },
+  "dependencies": {
+    "commander": "^13.0.0",
+    "execa": "^9.0.0",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0"
+  }
+}
