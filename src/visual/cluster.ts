@@ -176,9 +176,11 @@ async function clusterByIntent(
   const prompt = `You group change-summary items into visual topics for before/after diagrams.
 
 Rules:
-- Default to ONE topic when items are parts of the same feature, refactor, or story — even if they touch different files (e.g. cluster logic + pipeline + render + README for "multi-image visuals").
-- Only create multiple topics when changes are truly unrelated product concerns (different features/domains a reviewer would understand separately).
-- Maximum ${MAX_VISUAL_TOPICS} topics. Prefer fewer.
+- If items all advance the SAME headline/feature/story, return EXACTLY ONE topic with every item index — even across many files, docs, prompts, tests, and upload plumbing.
+- Example: clustering + pipeline + PR render + asset upload + README + prompt polish for "multi-image visuals" → one topic.
+- Only create multiple topics when a reviewer would treat them as separate product changes (e.g. a UI redesign AND an unrelated billing API).
+- Prompt/style tweaks, tests, and docs for a feature stay in that feature's topic.
+- Maximum ${MAX_VISUAL_TOPICS} topics. Prefer fewer; one is best when unsure.
 - Every item index must appear in exactly one topic. Use 0-based indices.
 - Topic titles: short, human, <=80 chars.
 
