@@ -1,7 +1,12 @@
 #!/usr/bin/env node
 import { Command } from "commander";
 import { relative, resolve } from "node:path";
-import { loadConfig, mergeConfig, type ProviderName, type ToneName } from "./config.js";
+import {
+  loadConfig,
+  mergeConfig,
+  type ProviderName,
+  type ToneName,
+} from "./config.js";
 import { gatherDiff, NoChangesError, GitError } from "./git.js";
 import { resolveProvider } from "./providers/index.js";
 import { summarize, SummarizeError } from "./summarize.js";
@@ -12,6 +17,7 @@ import { ChromeError } from "./visual/chrome.js";
 import { renderPr } from "./render/pr.js";
 import { renderSlack } from "./render/slack.js";
 import { renderJson } from "./render/json.js";
+import { createUi } from "./ui/index.js";
 
 type OutputType = "pr" | "slack" | "json";
 
@@ -30,6 +36,7 @@ type SharedOpts = {
 
 async function run(type: OutputType, opts: SharedOpts): Promise<number> {
   const cwd = process.cwd();
+  const ui = createUi();
   const fileConfig = loadConfig({ cwd });
   const flagConfig = {
     provider: opts.provider as ProviderName | undefined,
@@ -43,36 +50,29 @@ async function run(type: OutputType, opts: SharedOpts): Promise<number> {
   };
   const config = mergeConfig(fileConfig, flagConfig);
 
-  const log = (msg: string) => {
-    console.error(msg);
-  };
-
   let provider;
   try {
     provider = await resolveProvider({
       flag: config.provider,
       config,
-      log,
+      log: (msg) => ui.note(msg),
     });
   } catch (err) {
-    log(err instanceof Error ? err.message : String(err));
+    ui.error(err instanceof Error ? err.message : String(err));
     return 1;
   }
 
   const tone: ToneName = config.tone ?? "technical";
-  const imagesEnabled =
-    type === "pr" ? !opts.noImages : false;
+  const imagesEnabled = type === "pr" ? !opts.noImages : false;
 
   let diff;
+  const diffSpin = ui.stage("diff");
   try {
-    log("farq: gathering diff…");
     diff = await gatherDiff({ cwd, range: opts.range });
+    diffSpin.succeed("diff ready");
   } catch (err) {
-    if (err instanceof NoChangesError || err instanceof GitError) {
-      log(err.message);
-      return 1;
-    }
-    log(err instanceof Error ? err.message : String(err));
+    const msg = err instanceof Error ? err.message : String(err);
+    diffSpin.fail(msg);
     return 1;
   }
 
@@ -86,8 +86,8 @@ async function run(type: OutputType, opts: SharedOpts): Promise<number> {
     }
   }
 
-  log(`farq: summarizing with ${provider.name}…`);
   let summary;
+  const sumSpin = ui.stage("summarize", provider.name);
   try {
     summary = await summarize({
       provider,
@@ -95,12 +95,10 @@ async function run(type: OutputType, opts: SharedOpts): Promise<number> {
       tone,
       titleConventionBlurb: titleBlurb || undefined,
     });
+    sumSpin.succeed(`summarized with ${provider.name}`);
   } catch (err) {
-    if (err instanceof SummarizeError) {
-      log(err.message);
-      return 2;
-    }
-    log(err instanceof Error ? err.message : String(err));
+    const msg = err instanceof Error ? err.message : String(err);
+    sumSpin.fail(msg);
     return 2;
   }
 
@@ -115,7 +113,7 @@ async function run(type: OutputType, opts: SharedOpts): Promise<number> {
   let images: string[] = [];
 
   if (imagesEnabled || (opts.before && opts.after)) {
-    log("farq: visual pipeline…");
+    const visSpin = ui.stage("visual", provider.name);
     try {
       const visual = await runVisualPipeline({
         cwd,
@@ -128,24 +126,33 @@ async function run(type: OutputType, opts: SharedOpts): Promise<number> {
         before: opts.before,
         after: opts.after,
         verbose: opts.verbose,
-        log: opts.verbose ? log : () => undefined,
+        log: opts.verbose ? (msg) => ui.note(msg) : () => undefined,
       });
       imagePath = visual.imagePath;
       images = visual.images;
-      if (visual.warning) log(`farq: ${visual.warning}`);
+      if (visual.warning) {
+        visSpin.succeed("visuals skipped");
+        ui.note(visual.warning);
+      } else if (imagePath) {
+        visSpin.succeed("visuals ready");
+      } else {
+        visSpin.succeed("no visual (ok)");
+      }
     } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
       if (err instanceof ChromeError && opts.before && opts.after) {
-        log(err.message);
+        visSpin.fail(msg);
         return 1;
       }
-      log(
-        `farq: ${err instanceof Error ? err.message : String(err)} (continuing without image)`,
-      );
+      visSpin.succeed("visuals skipped");
+      ui.note(`${msg} (continuing without image)`);
     }
   }
 
   const relImage =
-    imagePath != null ? relative(cwd, resolve(imagePath)).replaceAll("\\", "/") : null;
+    imagePath != null
+      ? relative(cwd, resolve(imagePath)).replaceAll("\\", "/")
+      : null;
 
   let artifact = "";
   if (type === "pr") {
@@ -153,11 +160,14 @@ async function run(type: OutputType, opts: SharedOpts): Promise<number> {
   } else if (type === "slack") {
     artifact = renderSlack(summary);
   } else {
-    artifact = renderJson(summary, images.map((p) => relative(cwd, p).replaceAll("\\", "/")));
+    artifact = renderJson(
+      summary,
+      images.map((p) => relative(cwd, p).replaceAll("\\", "/")),
+    );
   }
 
   if (type === "pr" && opts.open) {
-    log("farq: opening PR…");
+    const openSpin = ui.stage("open");
     try {
       const result = await openPullRequest({
         cwd,
@@ -168,15 +178,15 @@ async function run(type: OutputType, opts: SharedOpts): Promise<number> {
         imagePath,
       });
       if (result.skipped) {
-        log(`farq: ${result.reason}`);
+        openSpin.succeed(result.reason);
       } else {
-        log(
-          `farq: PR ${result.action}${result.url ? ` — ${result.url}` : ""}`,
+        openSpin.succeed(
+          `PR ${result.action}${result.url ? ` — ${result.url}` : ""}`,
         );
-        if (result.warning) log(`farq: ${result.warning}`);
+        if (result.warning) ui.note(result.warning);
       }
     } catch (err) {
-      log(err instanceof Error ? err.message : String(err));
+      openSpin.fail(err instanceof Error ? err.message : String(err));
       return 1;
     }
   }
@@ -211,7 +221,11 @@ async function main() {
     program
       .command("pr", { isDefault: true })
       .description("PR title + body markdown")
-      .option("--open", "create a GitHub PR with gh (template-aware)", false)
+      .option(
+        "--open",
+        "create or update a GitHub PR with gh (template-aware)",
+        false,
+      )
       .action(async (opts: SharedOpts) => {
         process.exitCode = await run("pr", opts);
       }),
@@ -239,6 +253,7 @@ async function main() {
 }
 
 main().catch((err) => {
-  console.error(err instanceof Error ? err.message : String(err));
+  const ui = createUi();
+  ui.error(err instanceof Error ? err.message : String(err));
   process.exitCode = 1;
 });
