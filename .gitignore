@@ -2,5 +2,6 @@ docs/
 node_modules/
 dist/
 .farq/
+.cursor/
 *.log
 .DS_Store
