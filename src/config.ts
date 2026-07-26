@@ -40,14 +40,18 @@ export function mergeConfig(
   base: FarqConfig,
   override: FarqConfig,
 ): FarqConfig {
-  return {
-    provider: override.provider ?? base.provider,
-    tone: override.tone ?? base.tone,
-    models: {
-      ...base.models,
-      ...stripUndefined(override.models ?? {}),
-    },
+  const out: FarqConfig = {};
+  const provider = override.provider ?? base.provider;
+  const tone = override.tone ?? base.tone;
+  const models = {
+    ...base.models,
+    ...stripUndefined(override.models ?? {}),
   };
+
+  if (provider !== undefined) out.provider = provider;
+  if (tone !== undefined) out.tone = tone;
+  if (Object.keys(models).length > 0) out.models = models;
+  return out;
 }
 
 function stripUndefined<T extends Record<string, unknown>>(obj: T): Partial<T> {
@@ -71,20 +75,25 @@ function readJsonFile(path: string): FarqConfig | null {
 
 function sanitize(data: FarqConfig): FarqConfig {
   const out: FarqConfig = {};
-  if (data.provider === "claude" || data.provider === "opencode" || data.provider === "fake") {
+  if (
+    data.provider === "claude" ||
+    data.provider === "opencode" ||
+    data.provider === "fake"
+  ) {
     out.provider = data.provider;
   }
   if (data.tone === "technical" || data.tone === "client") {
     out.tone = data.tone;
   }
   if (data.models && typeof data.models === "object") {
-    out.models = {};
+    const models: NonNullable<FarqConfig["models"]> = {};
     if (typeof data.models.claudeCheap === "string") {
-      out.models.claudeCheap = data.models.claudeCheap;
+      models.claudeCheap = data.models.claudeCheap;
     }
     if (typeof data.models.opencodeCheap === "string") {
-      out.models.opencodeCheap = data.models.opencodeCheap;
+      models.opencodeCheap = data.models.opencodeCheap;
     }
+    if (Object.keys(models).length > 0) out.models = models;
   }
   return out;
 }
