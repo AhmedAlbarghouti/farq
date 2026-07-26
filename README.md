@@ -26,7 +26,7 @@ Or run without installing:
 npx @ahmedalbarghouti/farq@0.0.2 --help
 ```
 
-Add `.farq/` to your repo ignore file (generated HTML/PNG land there).
+Generated images land in a **user cache directory outside the repo** by default (no `.gitignore` change needed). Use `--out .farq` if you want them in-tree.
 
 ## Requirements
 
@@ -95,7 +95,7 @@ Validated change summary plus an `images` array of produced file paths.
 - Generated compositions include a small **generated preview** badge.
 - Diagrams stay conceptual — no code dumps.
 - Missing Chrome / visual failure **soft-degrades** to text-only with a stderr warning (exit 0), unless you passed `--before`/`--after` (then hard-fail).
-- A local `.farq/before-after.png` path will not render on GitHub until the file is attached or uploaded. `--open` tries a best-effort upload.
+- A local image path will not render on GitHub until the file is attached or uploaded. `--open` tries a best-effort upload (and rewrites stdout to the hosted URL).
 
 ## Config
 
@@ -126,7 +126,7 @@ If both `claude` and `opencode` are installed and nothing is configured, farq us
 | `-t, --tone` | `technical` \| `client` |
 | `--before` / `--after` | manual screenshots (skips generation) |
 | `--no-images` | skip visuals |
-| `-o, --out` | image output dir (default `.farq/`) |
+| `-o, --out` | image output dir (default: OS user cache, outside the repo) |
 | `--model-cheap` | cheap model id for visuals |
 | `-v, --verbose` | verbose logs (incl. `feasible: false` reasons) |
 | `--open` | (`pr` only) create PR with `gh` |

@@ -1,6 +1,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+import { defaultOutDir } from "../paths.js";
 import { resolveChrome, screenshotHtml, ChromeError } from "./chrome.js";
 
 export type ComposeOptions = {
@@ -50,7 +51,7 @@ export async function composeBeforeAfter(
   options: ComposeOptions,
 ): Promise<string> {
   const cwd = options.cwd ?? process.cwd();
-  const outDir = resolve(cwd, options.outDir ?? ".farq");
+  const outDir = resolve(cwd, options.outDir ?? defaultOutDir(cwd));
   mkdirSync(outDir, { recursive: true });
 
   const before = readFileSync(options.beforePath);

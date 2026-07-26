@@ -8,6 +8,7 @@ import { gatherVisualFileContents } from "../git.js";
 import { decideGate } from "./gate.js";
 import { generateMockup } from "./mockup.js";
 import { generateDiagram } from "./diagram.js";
+import { defaultOutDir } from "../paths.js";
 import { composeBeforeAfter, ChromeError } from "./compose.js";
 import { screenshotHtml, resolveChrome } from "./chrome.js";
 
@@ -36,7 +37,7 @@ export async function runVisualPipeline(
   options: VisualPipelineOptions,
 ): Promise<VisualPipelineResult> {
   const cwd = options.cwd ?? process.cwd();
-  const outDir = resolve(cwd, options.outDir ?? ".farq");
+  const outDir = resolve(cwd, options.outDir ?? defaultOutDir(cwd));
   const log = options.log ?? (() => undefined);
   const vlog = (msg: string) => {
     if (options.verbose) log(msg);
