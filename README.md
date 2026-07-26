@@ -91,7 +91,7 @@ Validated change summary plus an `images` array of produced file paths.
 
 ## Images (honesty policy)
 
-- Visuals come from the diff only. If a faithful preview is not possible, **no image** is produced (still exit 0).
+- Visuals come from the diff only. UI markup gets a mockup attempt; everything else gets a small concept flowchart/diagram. If the model cannot produce a faithful preview, **no image** is produced (still exit 0).
 - Generated compositions include a small **generated preview** badge.
 - Diagrams stay conceptual — no code dumps.
 - Missing Chrome / visual failure **soft-degrades** to text-only with a stderr warning (exit 0), unless you passed `--before`/`--after` (then hard-fail).

@@ -35,13 +35,24 @@ describe("decideGate", () => {
     expect(decision).toBe("diagram");
   });
 
-  it("routes pure logic diffs to none", () => {
+  it("routes pure logic diffs to diagram (flowchart fallback)", () => {
     const decision = decideGate([
       file(
         "src/lib/math.ts",
         `@@\n- export function add(a,b){return a+b}\n+ export function add(a,b){return a+b+0}\n`,
       ),
     ]);
-    expect(decision).toBe("none");
+    expect(decision).toBe("diagram");
+  });
+
+  it("routes docs-only diffs to diagram", () => {
+    const decision = decideGate([
+      file("README.md", "@@\n- old\n+ new install section\n"),
+    ]);
+    expect(decision).toBe("diagram");
+  });
+
+  it("returns none when there are no files", () => {
+    expect(decideGate([])).toBe("none");
   });
 });
