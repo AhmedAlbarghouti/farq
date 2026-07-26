@@ -169,8 +169,11 @@ async function run(type: OutputType, opts: SharedOpts): Promise<number> {
       });
       if (result.skipped) {
         log(`farq: ${result.reason}`);
-      } else if (result.warning) {
-        log(`farq: ${result.warning}`);
+      } else {
+        log(
+          `farq: PR ${result.action}${result.url ? ` — ${result.url}` : ""}`,
+        );
+        if (result.warning) log(`farq: ${result.warning}`);
       }
     } catch (err) {
       log(err instanceof Error ? err.message : String(err));

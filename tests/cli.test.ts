@@ -35,7 +35,7 @@ describe("cli", () => {
       [bin, "pr", "--provider", "fake", "--no-images"],
       { cwd: dir, reject: false },
     );
-    expect(result.exitCode).toBe(0);
+    expect(result.exitCode, result.stderr || result.stdout).toBe(0);
     const first = result.stdout.split("\n")[0];
     expect(first.length).toBeGreaterThan(0);
     expect(result.stdout).toContain("### Changes");
@@ -48,7 +48,7 @@ describe("cli", () => {
       [bin, "slack", "--provider", "fake"],
       { cwd: dir, reject: false },
     );
-    expect(result.exitCode).toBe(0);
+    expect(result.exitCode, result.stderr || result.stdout).toBe(0);
     expect(result.stdout).toMatch(/^\*/m);
     expect(result.stdout).toContain(":sparkles:");
   });
@@ -69,7 +69,7 @@ describe("cli", () => {
       [bin, "pr", "--provider", "fake", "--no-images", "--open"],
       { cwd: dir, reject: false },
     );
-    expect(result.exitCode).toBe(0);
+    expect(result.exitCode, result.stderr || result.stdout).toBe(0);
     expect(result.stderr).toMatch(/Already on main|skipping PR/i);
   });
 });

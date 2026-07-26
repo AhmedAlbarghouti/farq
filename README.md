@@ -77,7 +77,7 @@ farq pr --open
 1. Reads `.github` PR template if present and fills known sections  
 2. Infers title style from recent merged PR titles when `gh` works  
 3. Best-effort uploads the composed image as a prerelease asset and embeds the URL  
-4. Runs `gh pr create` and opens the PR in the browser  
+4. Creates the PR with `gh pr create`, or **updates** title/body with `gh pr edit` if one already exists for the branch, then opens it in the browser  
 
 On the default branch (`main` / `master` / repo default), `--open` skips create and still prints the artifact. Titles are capped at GitHub's **256** character limit (overflow goes into the body).
 
@@ -91,7 +91,7 @@ Validated change summary plus an `images` array of produced file paths.
 
 ## Images (honesty policy)
 
-- Visuals come from the diff only. If a faithful preview is not possible, **no image** is produced (still exit 0).
+- Visuals come from the diff only. UI markup gets a mockup attempt; everything else gets a small concept flowchart/diagram. If the model cannot produce a faithful preview, **no image** is produced (still exit 0).
 - Generated compositions include a small **generated preview** badge.
 - Diagrams stay conceptual — no code dumps.
 - Missing Chrome / visual failure **soft-degrades** to text-only with a stderr warning (exit 0), unless you passed `--before`/`--after` (then hard-fail).
@@ -151,6 +151,12 @@ git push origin v0.0.1
 ```
 
 Requires repo secret `NPM_TOKEN`. Package name: `farq`.
+
+## Repository ops
+
+- **CI** runs on every PR and on pushes to `main` (test + build + `--help` smoke).
+- **`main` is protected** — changes go through PRs; the `CI / test` check must pass.
+- **Releases** are tag-triggered: create `v0.0.1` (or later) after merge; the publish workflow needs a repo secret named `NPM_TOKEN` (npm automation/granular token with publish rights).
 
 ## Roadmap
 

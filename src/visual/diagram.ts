@@ -16,14 +16,16 @@ export async function generateDiagram(options: {
   model?: string;
   log?: (msg: string) => void;
 }): Promise<DiagramResult> {
-  const prompt = `You create a conceptual before/after flow diagram as one self-contained HTML document.
+  const prompt = `You create a conceptual before/after flowchart as one self-contained HTML document.
+
+This is the fallback visual when a pixel UI mockup is not appropriate (API, logic, docs, config, etc.). Prefer a small flowchart or labeled before/after boxes that explain the change at a glance.
 
 Rules:
 - Pure HTML/CSS, no libraries, no external requests, system fonts.
-- Two labeled columns (Before / After) with simple boxes/arrows.
-- Concept-level only: field/endpoint names OK. NO code, NO syntax, NO JSON dumps.
+- Two labeled columns (Before / After) with simple boxes/arrows (flowchart style).
+- Concept-level only: field/endpoint/step names OK. NO code, NO syntax, NO JSON dumps, NO walls of text.
 - Include a small corner badge text: generated preview
-- If you cannot produce a faithful conceptual visual from the diff alone, return {"feasible": false, "reason": "..."}.
+- If you truly cannot produce a faithful conceptual visual from the diff alone, return {"feasible": false, "reason": "..."}. Prefer a simple flowchart over declining.
 
 Return JSON only:
 {"feasible": true, "html": "..."}
