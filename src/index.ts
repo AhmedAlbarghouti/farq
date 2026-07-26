@@ -224,7 +224,7 @@ async function main() {
     .description(
       "Turn git branch changes into paste-ready PR/Slack updates with optional before/after visuals",
     )
-    .version("0.0.2");
+    .version("0.0.3");
 
   addShared(
     program

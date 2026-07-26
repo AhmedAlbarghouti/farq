@@ -5,13 +5,13 @@
 One command. No servers. No API keys. Auth stays with your local `claude` or `opencode` CLI.
 
 ```bash
-npx @ahmedalbarghouti/farq@0.0.2 pr           # title + markdown body (+ image when feasible)
+npx @ahmedalbarghouti/farq@0.0.3 pr           # title + markdown body (+ image when feasible)
 npx farq slack              # Slack mrkdwn daily update
 npx farq json               # structured JSON
 npx farq pr --open          # fill PR template + create with gh
 ```
 
-> **0.0.2** — PATH/`gh`/Chrome resolution, hosted-image PR body cleanup, orphaned asset prune. CLI surface (`pr` / `slack` / `json`) is the stable bit.
+> **0.0.3** — PATH/`gh`/Chrome resolution, hosted-image PR body cleanup, orphaned asset prune. CLI surface (`pr` / `slack` / `json`) is the stable bit.
 
 ## Install
 
@@ -23,7 +23,7 @@ farq --help
 Or run without installing:
 
 ```bash
-npx @ahmedalbarghouti/farq@0.0.2 --help
+npx @ahmedalbarghouti/farq@0.0.3 --help
 ```
 
 Generated images land in a **user cache directory outside the repo** by default (no `.gitignore` change needed). Use `--out .farq` if you want them in-tree.
@@ -145,7 +145,7 @@ Progress → **stderr**. Artifact → **stdout**.
 
 - **CI** runs on every PR and on pushes to `main` (test + build + `--help` smoke).
 - **`main` is protected** — changes go through PRs; the `CI / test` check must pass.
-- **Releases** are tag-triggered: create `v0.0.2` (or later) after merge; the publish workflow needs a repo secret named `NPM_TOKEN` (npm automation/granular token with publish rights).
+- **Releases** are tag-triggered: create `v0.0.3` (or later) after merge; the publish workflow needs a repo secret named `NPM_TOKEN` (npm automation/granular token with publish rights).
 - **`--open` image assets:** uploaded as `farq-assets-<branch>` prereleases; farq deletes orphaned tags whose branch no longer has an open PR.
 
 ## Roadmap
