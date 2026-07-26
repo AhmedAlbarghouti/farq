@@ -18,6 +18,7 @@ import { renderPr } from "./render/pr.js";
 import { renderSlack } from "./render/slack.js";
 import { renderJson } from "./render/json.js";
 import { createUi } from "./ui/index.js";
+import { defaultOutDir, displayImageRef } from "./paths.js";
 
 type OutputType = "pr" | "slack" | "json";
 
@@ -119,7 +120,7 @@ async function run(type: OutputType, opts: SharedOpts): Promise<number> {
     try {
       const visual = await runVisualPipeline({
         cwd,
-        outDir: opts.out ?? ".farq",
+        outDir: opts.out ?? defaultOutDir(cwd),
         summary,
         diff,
         provider,
@@ -152,9 +153,7 @@ async function run(type: OutputType, opts: SharedOpts): Promise<number> {
   }
 
   const relImage =
-    imagePath != null
-      ? relative(cwd, resolve(imagePath)).replaceAll("\\", "/")
-      : null;
+    imagePath != null ? displayImageRef(cwd, imagePath) : null;
 
   let artifact = "";
   if (type === "pr") {
@@ -164,7 +163,7 @@ async function run(type: OutputType, opts: SharedOpts): Promise<number> {
   } else {
     artifact = renderJson(
       summary,
-      images.map((p) => relative(cwd, p).replaceAll("\\", "/")),
+      images.map((p) => displayImageRef(cwd, p)),
     );
   }
 
@@ -186,6 +185,9 @@ async function run(type: OutputType, opts: SharedOpts): Promise<number> {
           `PR ${result.action}${result.url ? ` — ${result.url}` : ""}`,
         );
         if (result.warning) ui.note(result.warning);
+        // Match GitHub body (hosted image URL, no local-path note).
+        artifact = `${result.title}\n\n${result.body}`.replace(/\n{3,}/g, "\n\n");
+        if (!artifact.endsWith("\n")) artifact += "\n";
       }
     } catch (err) {
       openSpin.fail(err instanceof Error ? err.message : String(err));
@@ -205,7 +207,7 @@ function addShared(cmd: Command): Command {
     .option("--before <path>", "manual before screenshot")
     .option("--after <path>", "manual after screenshot")
     .option("--no-images", "skip image generation/composition")
-    .option("-o, --out <dir>", "output dir for images", ".farq")
+    .option("-o, --out <dir>", "output dir for images (default: user cache, outside the repo)")
     .option("--model-cheap <id>", "model for visual generation")
     .option("-v, --verbose", "verbose logging", false);
 }
@@ -217,7 +219,7 @@ async function main() {
     .description(
       "Turn git branch changes into paste-ready PR/Slack updates with optional before/after visuals",
     )
-    .version("0.0.1");
+    .version("0.0.2");
 
   addShared(
     program

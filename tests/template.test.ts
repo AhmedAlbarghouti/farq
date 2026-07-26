@@ -49,4 +49,16 @@ describe("fillPrTemplate", () => {
     expect(body).toContain("https://github.com/x/y/releases/download/t/a.png");
     expect(body).not.toContain("Local image path");
   });
+
+  it("substitutes absolute cache image paths with hosted URL", () => {
+    const { body } = fillPrTemplate({
+      template: null,
+      summary: FAKE_SUMMARY,
+      bodyMarkdown:
+        "### Before / After\n\n![x](C:\\Users\\me\\AppData\\Local\\farq\\cache\\abc\\before-after.png)\n",
+      imageUrl: "https://example.com/a.png",
+    });
+    expect(body).toContain("https://example.com/a.png");
+    expect(body).not.toContain("AppData");
+  });
 });

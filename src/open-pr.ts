@@ -15,7 +15,15 @@ export type OpenPrResult =
       action: "created" | "updated";
       url?: string;
       warning?: string;
+      title: string;
+      body: string;
+      imageUrl?: string | null;
     };
+
+/** Prerelease tag used to host a branch's composed PNG. */
+export function assetTagForBranch(branch: string): string {
+  return `farq-assets-${branch.replace(/[^a-zA-Z0-9._-]/g, "-").slice(0, 40)}`;
+}
 
 async function gh(
   cwd: string,
@@ -178,6 +186,9 @@ export async function openPullRequest(options: {
         action: "updated",
         url: existing.url,
         warning,
+        title,
+        body,
+        imageUrl,
       };
     }
 
@@ -199,6 +210,9 @@ export async function openPullRequest(options: {
       action: "created",
       url: created.stdout?.trim() || undefined,
       warning,
+      title,
+      body,
+      imageUrl,
     };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
@@ -208,13 +222,75 @@ export async function openPullRequest(options: {
   }
 }
 
+/**
+ * Delete `farq-assets-*` prereleases whose branch no longer has an open PR.
+ * Always keeps `keepTag` (the just-uploaded asset).
+ */
+export async function pruneOrphanedFarqAssets(
+  cwd: string,
+  keepTag: string,
+): Promise<string[]> {
+  const deleted: string[] = [];
+  try {
+    const { stdout: releasesOut, exitCode: relCode } = await gh(
+      cwd,
+      ["release", "list", "--limit", "100", "--json", "tagName,isPrerelease"],
+      { reject: false },
+    );
+    if (relCode !== 0 || !releasesOut.trim()) return deleted;
+
+    const releases = JSON.parse(releasesOut) as {
+      tagName: string;
+      isPrerelease: boolean;
+    }[];
+
+    const candidates = releases.filter(
+      (r) =>
+        r.isPrerelease &&
+        r.tagName.startsWith("farq-assets-") &&
+        r.tagName !== keepTag,
+    );
+    if (candidates.length === 0) return deleted;
+
+    const { stdout: prsOut, exitCode: prCode } = await gh(
+      cwd,
+      ["pr", "list", "--state", "open", "--limit", "100", "--json", "headRefName"],
+      { reject: false },
+    );
+    const openTags = new Set<string>();
+    if (prCode === 0 && prsOut.trim()) {
+      const prs = JSON.parse(prsOut) as { headRefName: string }[];
+      for (const pr of prs) {
+        openTags.add(assetTagForBranch(pr.headRefName));
+      }
+    }
+
+    for (const rel of candidates) {
+      if (openTags.has(rel.tagName)) continue;
+      try {
+        await gh(
+          cwd,
+          ["release", "delete", rel.tagName, "--yes", "--cleanup-tag"],
+          { reject: false },
+        );
+        deleted.push(rel.tagName);
+      } catch {
+        // best-effort
+      }
+    }
+  } catch {
+    // best-effort — never fail --open for prune
+  }
+  return deleted;
+}
+
 /** Best-effort: prerelease asset URL for the PNG. */
 export async function uploadPrImage(
   cwd: string,
   imagePath: string,
   branch: string,
 ): Promise<string> {
-  const tag = `farq-assets-${branch.replace(/[^a-zA-Z0-9._-]/g, "-").slice(0, 40)}`;
+  const tag = assetTagForBranch(branch);
   try {
     await gh(cwd, ["release", "delete", tag, "--yes", "--cleanup-tag"], {
       reject: false,
@@ -247,5 +323,7 @@ export async function uploadPrImage(
 
   const url = stdout.trim();
   if (!url) throw new Error("no asset URL returned");
+
+  await pruneOrphanedFarqAssets(cwd, tag);
   return url;
 }

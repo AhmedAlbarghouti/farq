@@ -35,9 +35,10 @@ export function fillPrTemplate(options: {
     body = options.bodyMarkdown;
     if (overflow) body = overflow + "\n\n" + body;
     if (options.imageUrl) {
-      const re = /\]\((?:\.\/)?\.farq\/[^)]+\)/;
+      // Swap any non-http(s) image target (cache path, .farq/, etc.).
+      const re = /!\[([^\]]*)\]\((?!https?:\/\/)[^)]+\)/;
       if (re.test(body)) {
-        body = body.replace(re, "](" + options.imageUrl + ")");
+        body = body.replace(re, "![$1](" + options.imageUrl + ")");
       } else {
         body =
           "### Before / After\n\n![before / after](" +

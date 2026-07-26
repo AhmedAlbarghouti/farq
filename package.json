@@ -1,6 +1,6 @@
 {
   "name": "@ahmedalbarghouti/farq",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "Turn git branch changes into paste-ready PR/Slack updates with optional before/after visuals",
   "type": "module",
   "engines": {
