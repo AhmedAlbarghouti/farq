@@ -28,6 +28,7 @@ type SharedOpts = {
   before?: string;
   after?: string;
   noImages?: boolean;
+  images?: boolean;
   out?: string;
   modelCheap?: string;
   verbose?: boolean;
@@ -63,7 +64,8 @@ async function run(type: OutputType, opts: SharedOpts): Promise<number> {
   }
 
   const tone: ToneName = config.tone ?? "technical";
-  const imagesEnabled = type === "pr" ? !opts.noImages : false;
+  const noImages = opts.noImages === true || opts.images === false;
+  const imagesEnabled = type === "pr" ? !noImages : false;
 
   let diff;
   const diffSpin = ui.stage("diff");
@@ -122,7 +124,7 @@ async function run(type: OutputType, opts: SharedOpts): Promise<number> {
         diff,
         provider,
         modelCheap: cheapModel,
-        noImages: opts.noImages && !(opts.before && opts.after),
+        noImages: noImages && !(opts.before && opts.after),
         before: opts.before,
         after: opts.after,
         verbose: opts.verbose,
