@@ -91,7 +91,7 @@ Validated change summary plus an `images` array of produced file paths.
 
 ## Images (honesty policy)
 
-- Visuals come from the diff only. Unrelated change clusters get **up to 5** separate images (related file-overlapping items share one). UI markup gets a mockup attempt; everything else gets a small concept flowchart/diagram. If the model cannot produce a faithful preview for a topic, that topic is skipped (still exit 0).
+- Visuals come from the diff only. A cheap model groups summary items into **up to 5** visual topics by intent (same feature → one image; truly unrelated domains → separate). File-overlap is the fallback if that grouping fails. UI markup gets a mockup attempt; everything else gets a small concept flowchart/diagram. If a topic is infeasible, it is skipped (still exit 0).
 - Generated compositions include a small **generated preview** badge.
 - Diagrams stay conceptual — no code dumps.
 - Missing Chrome / visual failure **soft-degrades** to text-only with a stderr warning (exit 0), unless you passed `--before`/`--after` (then hard-fail).

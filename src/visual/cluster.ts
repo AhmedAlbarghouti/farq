@@ -1,4 +1,6 @@
+import { extractJson } from "../extract-json.js";
 import type { ChangeItem, ChangeSummary } from "../schema.js";
+import type { Provider } from "../providers/index.js";
 
 export const MAX_VISUAL_TOPICS = 5;
 
@@ -9,8 +11,53 @@ export type VisualTopic = {
   files: string[];
 };
 
-/** Group summary items into ≤5 visual topics (file-overlap union-find). */
-export function clusterVisualTopics(summary: ChangeSummary): VisualTopic[] {
+/**
+ * Prefer intent clustering via the cheap model; fall back to file-overlap.
+ * Same-theme items (one feature across many files) → one topic.
+ * Truly unrelated domains → separate topics (cap 5).
+ */
+export async function clusterVisualTopics(
+  summary: ChangeSummary,
+  options?: {
+    provider?: Provider;
+    model?: string;
+    log?: (msg: string) => void;
+  },
+): Promise<VisualTopic[]> {
+  const items = summary.items;
+  if (items.length === 0) return [];
+  if (items.length === 1) {
+    return [
+      {
+        id: 1,
+        title: items[0]!.title.slice(0, 80),
+        items,
+        files: uniqueFiles(items),
+      },
+    ];
+  }
+
+  if (options?.provider) {
+    try {
+      const ai = await clusterByIntent(summary, options.provider, options.model);
+      if (ai) {
+        options.log?.(
+          `visual topics (intent): ${ai.length} — ${ai.map((t) => t.title).join("; ")}`,
+        );
+        return ai;
+      }
+      options.log?.("visual topic intent clustering failed; using file overlap");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      options.log?.(`visual topic intent clustering error: ${msg}`);
+    }
+  }
+
+  return clusterByFileOverlap(summary);
+}
+
+/** File-overlap union-find (fallback). Exported for tests. */
+export function clusterByFileOverlap(summary: ChangeSummary): VisualTopic[] {
   const items = summary.items;
   if (items.length === 0) return [];
 
@@ -25,8 +72,6 @@ export function clusterVisualTopics(summary: ChangeSummary): VisualTopic[] {
     for (let j = i + 1; j < items.length; j++) {
       const a = items[i]!;
       const b = items[j]!;
-      // Only merge when both list files and they overlap — empty-file
-      // items stay separate so unrelated changes get their own visual.
       if (
         a.files.length > 0 &&
         b.files.length > 0 &&
@@ -71,6 +116,88 @@ export function clusterVisualTopics(summary: ChangeSummary): VisualTopic[] {
     ];
   }
 
+  return finalizeTopics(clusters);
+}
+
+/** Build topics from model JSON; null if invalid. Exported for tests. */
+export function topicsFromIntentJson(
+  summary: ChangeSummary,
+  raw: unknown,
+): VisualTopic[] | null {
+  const items = summary.items;
+  if (!raw || typeof raw !== "object") return null;
+  const topics = (raw as { topics?: unknown }).topics;
+  if (!Array.isArray(topics) || topics.length === 0) return null;
+  if (topics.length > MAX_VISUAL_TOPICS) return null;
+
+  const used = new Set<number>();
+  const built: VisualTopic[] = [];
+
+  for (const t of topics) {
+    if (!t || typeof t !== "object") return null;
+    const title = String((t as { title?: unknown }).title ?? "").trim();
+    const indices = (t as { item_indices?: unknown }).item_indices;
+    if (!title || !Array.isArray(indices) || indices.length === 0) return null;
+
+    const groupItems: ChangeItem[] = [];
+    for (const idx of indices) {
+      if (typeof idx !== "number" || !Number.isInteger(idx)) return null;
+      if (idx < 0 || idx >= items.length || used.has(idx)) return null;
+      used.add(idx);
+      groupItems.push(items[idx]!);
+    }
+    built.push({
+      id: built.length + 1,
+      title: title.slice(0, 80),
+      items: groupItems,
+      files: uniqueFiles(groupItems),
+    });
+  }
+
+  // Every item must appear exactly once.
+  if (used.size !== items.length) return null;
+  return finalizeTopics(built);
+}
+
+async function clusterByIntent(
+  summary: ChangeSummary,
+  provider: Provider,
+  model?: string,
+): Promise<VisualTopic[] | null> {
+  const listed = summary.items
+    .map(
+      (item, i) =>
+        `${i}. [${item.category}] ${item.title} — ${item.description} (files: ${
+          item.files.join(", ") || "none"
+        })`,
+    )
+    .join("\n");
+
+  const prompt = `You group change-summary items into visual topics for before/after diagrams.
+
+Rules:
+- Default to ONE topic when items are parts of the same feature, refactor, or story — even if they touch different files (e.g. cluster logic + pipeline + render + README for "multi-image visuals").
+- Only create multiple topics when changes are truly unrelated product concerns (different features/domains a reviewer would understand separately).
+- Maximum ${MAX_VISUAL_TOPICS} topics. Prefer fewer.
+- Every item index must appear in exactly one topic. Use 0-based indices.
+- Topic titles: short, human, <=80 chars.
+
+Return JSON only:
+{"topics":[{"title":"...","item_indices":[0,1,2]}]}
+
+Headline: ${summary.headline}
+Overview: ${summary.overview}
+
+Items:
+${listed}
+`;
+
+  const raw = await provider.complete(prompt, { model });
+  const json = extractJson(raw);
+  return topicsFromIntentJson(summary, json);
+}
+
+function finalizeTopics(clusters: VisualTopic[]): VisualTopic[] {
   return clusters.map((c, i) => ({
     ...c,
     id: i + 1,

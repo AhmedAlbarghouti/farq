@@ -1,6 +1,12 @@
-import { describe, expect, it } from "vitest";
-import { clusterVisualTopics, MAX_VISUAL_TOPICS } from "../src/visual/cluster.js";
+import { describe, expect, it, vi } from "vitest";
+import {
+  clusterByFileOverlap,
+  clusterVisualTopics,
+  MAX_VISUAL_TOPICS,
+  topicsFromIntentJson,
+} from "../src/visual/cluster.js";
 import type { ChangeSummary } from "../src/schema.js";
+import type { Provider } from "../src/providers/index.js";
 
 function summary(items: ChangeSummary["items"]): ChangeSummary {
   return {
@@ -11,9 +17,36 @@ function summary(items: ChangeSummary["items"]): ChangeSummary {
   };
 }
 
-describe("clusterVisualTopics", () => {
+const multiFeatureItems: ChangeSummary["items"] = [
+  {
+    category: "feature",
+    title: "Cluster topics",
+    description: "group items",
+    files: ["src/visual/cluster.ts"],
+  },
+  {
+    category: "feature",
+    title: "Pipeline loop",
+    description: "render per topic",
+    files: ["src/visual/pipeline.ts"],
+  },
+  {
+    category: "feature",
+    title: "PR render multi",
+    description: "embed many images",
+    files: ["src/render/pr.ts"],
+  },
+  {
+    category: "docs",
+    title: "README",
+    description: "document multi-visual",
+    files: ["README.md"],
+  },
+];
+
+describe("clusterByFileOverlap", () => {
   it("keeps a single item as one topic", () => {
-    const topics = clusterVisualTopics(
+    const topics = clusterByFileOverlap(
       summary([
         {
           category: "feature",
@@ -28,7 +61,7 @@ describe("clusterVisualTopics", () => {
   });
 
   it("merges items that share files", () => {
-    const topics = clusterVisualTopics(
+    const topics = clusterByFileOverlap(
       summary([
         {
           category: "feature",
@@ -48,30 +81,9 @@ describe("clusterVisualTopics", () => {
     expect(topics[0]!.items).toHaveLength(2);
   });
 
-  it("keeps unrelated items as separate topics", () => {
-    const topics = clusterVisualTopics(
-      summary([
-        {
-          category: "feature",
-          title: "UI",
-          description: "d",
-          files: ["ui/Button.tsx"],
-        },
-        {
-          category: "fix",
-          title: "API",
-          description: "d",
-          files: ["api/route.ts"],
-        },
-        {
-          category: "docs",
-          title: "README",
-          description: "d",
-          files: ["README.md"],
-        },
-      ]),
-    );
-    expect(topics).toHaveLength(3);
+  it("keeps file-disjoint items separate (fallback)", () => {
+    const topics = clusterByFileOverlap(summary(multiFeatureItems));
+    expect(topics.length).toBeGreaterThan(1);
   });
 
   it("caps at MAX_VISUAL_TOPICS by merging smallest", () => {
@@ -81,18 +93,71 @@ describe("clusterVisualTopics", () => {
       description: "d",
       files: [`file-${i}.ts`],
     }));
-    const topics = clusterVisualTopics(summary(items));
+    const topics = clusterByFileOverlap(summary(items));
     expect(topics.length).toBeLessThanOrEqual(MAX_VISUAL_TOPICS);
     expect(topics.flatMap((t) => t.items)).toHaveLength(items.length);
   });
+});
 
-  it("does not merge empty-file items together", () => {
-    const topics = clusterVisualTopics(
-      summary([
-        { category: "feature", title: "A", description: "d", files: [] },
-        { category: "fix", title: "B", description: "d", files: [] },
-      ]),
-    );
+describe("topicsFromIntentJson", () => {
+  it("builds one topic for a same-feature PR", () => {
+    const s = summary(multiFeatureItems);
+    const topics = topicsFromIntentJson(s, {
+      topics: [{ title: "Multi-visual pipeline", item_indices: [0, 1, 2, 3] }],
+    });
+    expect(topics).toHaveLength(1);
+    expect(topics![0]!.items).toHaveLength(4);
+    expect(topics![0]!.title).toBe("Multi-visual pipeline");
+  });
+
+  it("rejects incomplete coverage", () => {
+    const s = summary(multiFeatureItems);
+    expect(
+      topicsFromIntentJson(s, {
+        topics: [{ title: "Partial", item_indices: [0, 1] }],
+      }),
+    ).toBeNull();
+  });
+
+  it("splits truly unrelated indices", () => {
+    const s = summary(multiFeatureItems);
+    const topics = topicsFromIntentJson(s, {
+      topics: [
+        { title: "Visuals", item_indices: [0, 1, 2] },
+        { title: "Docs", item_indices: [3] },
+      ],
+    });
     expect(topics).toHaveLength(2);
+  });
+});
+
+describe("clusterVisualTopics", () => {
+  it("uses intent clustering when provider returns one topic", async () => {
+    const provider: Provider = {
+      name: "fake",
+      complete: async () =>
+        JSON.stringify({
+          topics: [
+            { title: "Multi-visual support", item_indices: [0, 1, 2, 3] },
+          ],
+        }),
+    };
+    const topics = await clusterVisualTopics(summary(multiFeatureItems), {
+      provider,
+    });
+    expect(topics).toHaveLength(1);
+    expect(topics[0]!.title).toBe("Multi-visual support");
+  });
+
+  it("falls back to file overlap when intent JSON is invalid", async () => {
+    const provider: Provider = {
+      name: "fake",
+      complete: async () => JSON.stringify({ topics: [] }),
+    };
+    const topics = await clusterVisualTopics(summary(multiFeatureItems), {
+      provider,
+      log: vi.fn(),
+    });
+    expect(topics.length).toBeGreaterThan(1);
   });
 });

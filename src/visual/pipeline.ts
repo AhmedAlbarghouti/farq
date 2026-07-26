@@ -86,7 +86,11 @@ export async function runVisualPipeline(
     };
   }
 
-  const topics = clusterVisualTopics(options.summary);
+  const topics = await clusterVisualTopics(options.summary, {
+    provider: options.provider,
+    model: options.modelCheap,
+    log: vlog,
+  });
   vlog(`visual topics: ${topics.length}`);
   if (topics.length === 0) {
     return emptyResult(false);
