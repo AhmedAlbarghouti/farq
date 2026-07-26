@@ -5,13 +5,13 @@
 One command. No servers. No API keys. Auth stays with your local `claude` or `opencode` CLI.
 
 ```bash
-npx @ahmedalbarghouti/farq@0.0.1 pr           # title + markdown body (+ image when feasible)
+npx @ahmedalbarghouti/farq@0.0.2 pr           # title + markdown body (+ image when feasible)
 npx farq slack              # Slack mrkdwn daily update
 npx farq json               # structured JSON
 npx farq pr --open          # fill PR template + create with gh
 ```
 
-> **0.0.1** — first public release. Expect rough edges; the CLI surface (`pr` / `slack` / `json`) is the stable bit.
+> **0.0.2** — PATH/`gh`/Chrome resolution, hosted-image PR body cleanup, orphaned asset prune. CLI surface (`pr` / `slack` / `json`) is the stable bit.
 
 ## Install
 
@@ -23,7 +23,7 @@ farq --help
 Or run without installing:
 
 ```bash
-npx @ahmedalbarghouti/farq@0.0.1 --help
+npx @ahmedalbarghouti/farq@0.0.2 --help
 ```
 
 Add `.farq/` to your repo ignore file (generated HTML/PNG land there).
@@ -146,17 +146,18 @@ Progress → **stderr**. Artifact → **stdout**.
 Tag-triggered publish via GitHub Actions (npm provenance):
 
 ```bash
-git tag v0.0.1
-git push origin v0.0.1
+git tag v0.0.2
+git push origin v0.0.2
 ```
 
-Requires repo secret `NPM_TOKEN`. Package name: `farq`.
+Requires repo secret `NPM_TOKEN`. Package name: `@ahmedalbarghouti/farq`.
 
 ## Repository ops
 
 - **CI** runs on every PR and on pushes to `main` (test + build + `--help` smoke).
 - **`main` is protected** — changes go through PRs; the `CI / test` check must pass.
-- **Releases** are tag-triggered: create `v0.0.1` (or later) after merge; the publish workflow needs a repo secret named `NPM_TOKEN` (npm automation/granular token with publish rights).
+- **Releases** are tag-triggered: create `v0.0.2` (or later) after merge; the publish workflow needs a repo secret named `NPM_TOKEN` (npm automation/granular token with publish rights).
+- **`--open` image assets:** uploaded as `farq-assets-<branch>` prereleases; farq deletes orphaned tags whose branch no longer has an open PR.
 
 ## Roadmap
 

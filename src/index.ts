@@ -186,6 +186,9 @@ async function run(type: OutputType, opts: SharedOpts): Promise<number> {
           `PR ${result.action}${result.url ? ` — ${result.url}` : ""}`,
         );
         if (result.warning) ui.note(result.warning);
+        // Match GitHub body (hosted image URL, no local-path note).
+        artifact = `${result.title}\n\n${result.body}`.replace(/\n{3,}/g, "\n\n");
+        if (!artifact.endsWith("\n")) artifact += "\n";
       }
     } catch (err) {
       openSpin.fail(err instanceof Error ? err.message : String(err));
@@ -217,7 +220,7 @@ async function main() {
     .description(
       "Turn git branch changes into paste-ready PR/Slack updates with optional before/after visuals",
     )
-    .version("0.0.1");
+    .version("0.0.2");
 
   addShared(
     program
