@@ -1,5 +1,5 @@
 {
-  "name": "farq",
+  "name": "@ahmedalbarghouti/farq",
   "version": "0.0.1",
   "description": "Turn git branch changes into paste-ready PR/Slack updates with optional before/after visuals",
   "type": "module",
@@ -7,7 +7,7 @@
     "node": ">=20"
   },
   "bin": {
-    "farq": "./dist/index.js"
+    "farq": "dist/index.js"
   },
   "files": [
     "dist",
@@ -31,7 +31,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/AhmedAlbarghouti/farq.git"
+    "url": "git+https://github.com/AhmedAlbarghouti/farq.git"
   },
   "dependencies": {
     "commander": "^13.0.0",
@@ -42,5 +42,12 @@
     "@types/node": "^22.0.0",
     "typescript": "^5.7.0",
     "vitest": "^3.0.0"
+  },
+  "bugs": {
+    "url": "https://github.com/AhmedAlbarghouti/farq/issues"
+  },
+  "homepage": "https://github.com/AhmedAlbarghouti/farq#readme",
+  "publishConfig": {
+    "access": "public"
   }
 }
