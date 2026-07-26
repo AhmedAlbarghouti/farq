@@ -5,7 +5,7 @@
 One command. No servers. No API keys. Auth stays with your local `claude` or `opencode` CLI.
 
 ```bash
-npx farq@0.0.1 pr           # title + markdown body (+ image when feasible)
+npx @ahmedalbarghouti/farq@0.0.1 pr           # title + markdown body (+ image when feasible)
 npx farq slack              # Slack mrkdwn daily update
 npx farq json               # structured JSON
 npx farq pr --open          # fill PR template + create with gh
@@ -16,14 +16,14 @@ npx farq pr --open          # fill PR template + create with gh
 ## Install
 
 ```bash
-npm i -g farq
+npm i -g @ahmedalbarghouti/farq
 farq --help
 ```
 
 Or run without installing:
 
 ```bash
-npx farq@0.0.1 --help
+npx @ahmedalbarghouti/farq@0.0.1 --help
 ```
 
 Add `.farq/` to your repo ignore file (generated HTML/PNG land there).
