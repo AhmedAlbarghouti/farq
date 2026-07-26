@@ -1,0 +1,90 @@
+import { existsSync, readFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
+
+export type ProviderName = "claude" | "opencode" | "fake";
+export type ToneName = "technical" | "client";
+
+export type FarqConfig = {
+  provider?: ProviderName;
+  tone?: ToneName;
+  models?: {
+    claudeCheap?: string;
+    opencodeCheap?: string;
+  };
+};
+
+export type LoadConfigOptions = {
+  cwd?: string;
+  globalDir?: string;
+};
+
+export function defaultGlobalDir(): string {
+  return join(homedir(), ".config", "farq");
+}
+
+export function loadConfig(options: LoadConfigOptions = {}): FarqConfig {
+  const cwd = options.cwd ?? process.cwd();
+  const globalDir = options.globalDir ?? defaultGlobalDir();
+
+  const globalCfg = readJsonFile(join(globalDir, "config.json"));
+  const projectCfg =
+    readJsonFile(join(cwd, ".farqrc.json")) ??
+    readJsonFile(join(cwd, ".farqrc"));
+
+  return mergeConfig(globalCfg ?? {}, projectCfg ?? {});
+}
+
+/** Merge with later sources winning. Undefined flag fields do not wipe base. */
+export function mergeConfig(
+  base: FarqConfig,
+  override: FarqConfig,
+): FarqConfig {
+  return {
+    provider: override.provider ?? base.provider,
+    tone: override.tone ?? base.tone,
+    models: {
+      ...base.models,
+      ...stripUndefined(override.models ?? {}),
+    },
+  };
+}
+
+function stripUndefined<T extends Record<string, unknown>>(obj: T): Partial<T> {
+  const out: Partial<T> = {};
+  for (const [k, v] of Object.entries(obj)) {
+    if (v !== undefined) (out as Record<string, unknown>)[k] = v;
+  }
+  return out;
+}
+
+function readJsonFile(path: string): FarqConfig | null {
+  if (!existsSync(path)) return null;
+  try {
+    const raw = readFileSync(path, "utf8");
+    const data = JSON.parse(raw) as FarqConfig;
+    return sanitize(data);
+  } catch {
+    return null;
+  }
+}
+
+function sanitize(data: FarqConfig): FarqConfig {
+  const out: FarqConfig = {};
+  if (data.provider === "claude" || data.provider === "opencode" || data.provider === "fake") {
+    out.provider = data.provider;
+  }
+  if (data.tone === "technical" || data.tone === "client") {
+    out.tone = data.tone;
+  }
+  if (data.models && typeof data.models === "object") {
+    out.models = {};
+    if (typeof data.models.claudeCheap === "string") {
+      out.models.claudeCheap = data.models.claudeCheap;
+    }
+    if (typeof data.models.opencodeCheap === "string") {
+      out.models.opencodeCheap = data.models.opencodeCheap;
+    }
+  }
+  return out;
+}
