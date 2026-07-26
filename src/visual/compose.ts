@@ -3,6 +3,7 @@ import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { defaultOutDir } from "../paths.js";
 import { resolveChrome, screenshotHtml, ChromeError } from "./chrome.js";
+import { DEFAULT_VIEWPORT } from "./viewport.js";
 
 export type ComposeOptions = {
   cwd?: string;
@@ -78,8 +79,8 @@ export async function composeBeforeAfter(
     chromePath,
     url: pathToFileURL(composePath).href,
     outPath: outPng,
-    width: 1400,
-    height: 900,
+    width: DEFAULT_VIEWPORT.width,
+    height: DEFAULT_VIEWPORT.height,
   });
   return outPng;
 }

@@ -3,6 +3,12 @@ import { join } from "node:path";
 import { extractJson } from "../extract-json.js";
 import type { ChangeSummary } from "../schema.js";
 import type { Provider } from "../providers/index.js";
+import {
+  DEFAULT_VIEWPORT,
+  VIEWPORT_MAX_HEIGHT,
+  VIEWPORT_MAX_WIDTH,
+  clampViewport,
+} from "./viewport.js";
 
 export type MockupResult =
   | {
@@ -30,11 +36,12 @@ Rules:
 - Stub only the minimum: container width, placeholder text where dynamic props appear (realistic neutral placeholders).
 - Do not invent UI that is not present in the code.
 - Never show raw code listings.
-- Visual craft: one clear composition, strong typographic hierarchy, purposeful (non-default) web fonts via @import from fonts.googleapis.com or fonts.bunny.net if helpful, atmospheric background (subtle gradient or pattern — not flat single-color), generous whitespace, high contrast for text. No purple-on-white clichés, no glow spam, no floating badge stickers on the mockup itself.
+- FRAME LIMIT (hard): design for exactly ${VIEWPORT_MAX_WIDTH}x${VIEWPORT_MAX_HEIGHT}px. html/body must be width/height 100% with overflow:hidden. All content must fit in that single screen — no scrolling, no content cut off at the bottom. Prefer denser layout over tall pages.
+- Visual craft: one clear composition, strong typographic hierarchy, purposeful (non-default) web fonts via @import from fonts.googleapis.com or fonts.bunny.net if helpful, atmospheric background (subtle gradient or pattern — not flat single-color), high contrast for text. No purple-on-white clichés, no glow spam, no floating badge stickers on the mockup itself.
 - If you cannot render faithfully, return {"feasible": false, "reason": "..."}.
 
 Return JSON only:
-{"feasible": true, "before_html": "...", "after_html": "...", "viewport": {"width":1280,"height":900}}
+{"feasible": true, "before_html": "...", "after_html": "...", "viewport": {"width":${DEFAULT_VIEWPORT.width},"height":${DEFAULT_VIEWPORT.height}}}
 or {"feasible": false, "reason": "..."}
 
 Change summary context:
@@ -77,6 +84,6 @@ ${options.files
     feasible: true,
     beforePath,
     afterPath,
-    viewport: json.viewport,
+    viewport: clampViewport(json.viewport),
   };
 }

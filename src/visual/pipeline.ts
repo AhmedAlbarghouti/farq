@@ -12,6 +12,7 @@ import { clusterVisualTopics, type VisualTopic } from "./cluster.js";
 import { defaultOutDir } from "../paths.js";
 import { composeBeforeAfter, ChromeError } from "./compose.js";
 import { screenshotHtml, resolveChrome } from "./chrome.js";
+import { DEFAULT_VIEWPORT, clampViewport } from "./viewport.js";
 
 export type VisualImage = {
   path: string;
@@ -178,17 +179,18 @@ async function renderTopic(options: {
     if (mockup.feasible) {
       const beforePng = join(outDir, `${prefix}before.png`);
       const afterPng = join(outDir, `${prefix}after.png`);
+      const vp = clampViewport(mockup.viewport);
       await screenshotHtml({
         url: pathToFileURL(mockup.beforePath).href,
         outPath: beforePng,
-        width: mockup.viewport?.width,
-        height: mockup.viewport?.height,
+        width: vp.width,
+        height: vp.height,
       });
       await screenshotHtml({
         url: pathToFileURL(mockup.afterPath).href,
         outPath: afterPng,
-        width: mockup.viewport?.width,
-        height: mockup.viewport?.height,
+        width: vp.width,
+        height: vp.height,
       });
       return composeBeforeAfter({
         cwd,
@@ -219,6 +221,8 @@ async function renderTopic(options: {
   await screenshotHtml({
     url: pathToFileURL(diagram.htmlPath).href,
     outPath: outPng,
+    width: DEFAULT_VIEWPORT.width,
+    height: DEFAULT_VIEWPORT.height,
   });
   return outPng;
 }

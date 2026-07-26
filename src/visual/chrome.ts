@@ -5,6 +5,7 @@ import {
   resolveExecutable,
   ToolNotFoundError,
 } from "../tools.js";
+import { clampViewport } from "./viewport.js";
 
 const TIMEOUT_MS = 30_000;
 
@@ -78,8 +79,10 @@ export async function screenshotHtml(
   options: ScreenshotOptions,
 ): Promise<void> {
   const chrome = options.chromePath ?? resolveChrome();
-  const width = options.width ?? 1280;
-  const height = options.height ?? 900;
+  const { width, height } = clampViewport({
+    width: options.width,
+    height: options.height,
+  });
 
   try {
     await execa(

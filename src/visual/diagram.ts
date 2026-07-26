@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { extractJson } from "../extract-json.js";
 import type { ChangeSummary } from "../schema.js";
 import type { Provider } from "../providers/index.js";
+import { VIEWPORT_MAX_HEIGHT, VIEWPORT_MAX_WIDTH } from "./viewport.js";
 
 export type DiagramResult =
   | { feasible: true; htmlPath: string }
@@ -25,7 +26,8 @@ Rules:
 - Pure HTML/CSS, no libraries, no external requests except optional @import fonts from fonts.googleapis.com or fonts.bunny.net.
 - Two labeled columns (Before / After) with simple boxes/arrows (flowchart style).
 - Concept-level only: field/endpoint/step names OK. NO code, NO syntax, NO JSON dumps, NO walls of text.
-- Visual craft: one clear composition, expressive typography, subtle atmospheric background (gradient or soft pattern), high contrast, generous spacing. Avoid purple-gradient clichés, neon glow, and cluttered sticker UI.
+- FRAME LIMIT (hard): the screenshot is exactly ${VIEWPORT_MAX_WIDTH}x${VIEWPORT_MAX_HEIGHT}px. Set html,body { margin:0; width:100%; height:100%; overflow:hidden }. The entire flowchart must fit in that frame with no scrolling and no clipped boxes or footer text. Prefer fewer/shorter steps over a tall diagram.
+- Visual craft: one clear composition, expressive typography, subtle atmospheric background (gradient or soft pattern), high contrast. Avoid purple-gradient clichés, neon glow, and cluttered sticker UI.
 - Include a small corner badge text: generated preview
 - If you truly cannot produce a faithful conceptual visual from the diff alone, return {"feasible": false, "reason": "..."}. Prefer a simple flowchart over declining.
 
