@@ -76,7 +76,7 @@ farq pr --open
 
 1. Reads `.github` PR template if present and fills known sections  
 2. Infers title style from recent merged PR titles when `gh` works  
-3. Best-effort uploads the composed image as a prerelease asset and embeds the URL  
+3. Best-effort uploads composed image(s) as prerelease assets and embeds the URL(s)  
 4. Creates the PR with `gh pr create`, or **updates** title/body with `gh pr edit` if one already exists for the branch, then opens it in the browser  
 
 On the default branch (`main` / `master` / repo default), `--open` skips create and still prints the artifact. Titles are capped at GitHub's **256** character limit (overflow goes into the body).
@@ -91,7 +91,7 @@ Validated change summary plus an `images` array of produced file paths.
 
 ## Images (honesty policy)
 
-- Visuals come from the diff only. UI markup gets a mockup attempt; everything else gets a small concept flowchart/diagram. If the model cannot produce a faithful preview, **no image** is produced (still exit 0).
+- Visuals come from the diff only. A cheap model groups summary items into **up to 5** visual topics by intent (same feature → one image; truly unrelated domains → separate). File-overlap is the fallback if that grouping fails. UI markup gets a mockup attempt; everything else gets a small concept flowchart/diagram. Screenshots are capped at **1280×720** so content must fit the frame (no tall cut-off pages). If a topic is infeasible, it is skipped (still exit 0).
 - Generated compositions include a small **generated preview** badge.
 - Diagrams stay conceptual — no code dumps.
 - Missing Chrome / visual failure **soft-degrades** to text-only with a stderr warning (exit 0), unless you passed `--before`/`--after` (then hard-fail).
@@ -140,17 +140,6 @@ If both `claude` and `opencode` are installed and nothing is configured, farq us
 | `2` | AI failure after retry / timeout |
 
 Progress → **stderr**. Artifact → **stdout**.
-
-## Publishing notes (maintainers)
-
-Tag-triggered publish via GitHub Actions (npm provenance):
-
-```bash
-git tag v0.0.2
-git push origin v0.0.2
-```
-
-Requires repo secret `NPM_TOKEN`. Package name: `@ahmedalbarghouti/farq`.
 
 ## Repository ops
 

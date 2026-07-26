@@ -26,6 +26,22 @@ describe("renderers", () => {
     expect(out).not.toContain("Local image path");
   });
 
+  it("pr embeds multiple visuals under separate headings", () => {
+    const out = renderPr({
+      summary: FAKE_SUMMARY,
+      images: [
+        { path: "https://ex/a.png", title: "UI button" },
+        { path: "https://ex/b.png", title: "API route" },
+      ],
+    });
+    expect(out).toContain("### Visuals");
+    expect(out).toContain("#### UI button");
+    expect(out).toContain("#### API route");
+    expect(out).toContain("](https://ex/a.png)");
+    expect(out).toContain("](https://ex/b.png)");
+    expect(out).not.toContain("Local image path");
+  });
+
   it("slack uses mrkdwn emoji lines and no image", () => {
     const out = renderSlack(FAKE_SUMMARY);
     expect(out).toContain(`*${FAKE_SUMMARY.headline}*`);

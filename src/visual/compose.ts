@@ -3,6 +3,7 @@ import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { defaultOutDir } from "../paths.js";
 import { resolveChrome, screenshotHtml, ChromeError } from "./chrome.js";
+import { DEFAULT_VIEWPORT } from "./viewport.js";
 
 export type ComposeOptions = {
   cwd?: string;
@@ -11,6 +12,8 @@ export type ComposeOptions = {
   afterPath: string;
   badge?: "generated preview" | "before / after";
   chromePath?: string;
+  /** Output PNG basename (default before-after.png). */
+  outFileName?: string;
 };
 
 export function buildComposeHtml(options: {
@@ -63,17 +66,21 @@ export async function composeBeforeAfter(
     badge,
   });
 
-  const composePath = join(outDir, "compose.html");
+  const stem = (options.outFileName ?? "before-after.png").replace(
+    /\.png$/i,
+    "",
+  );
+  const composePath = join(outDir, `${stem}-compose.html`);
   writeFileSync(composePath, html, "utf8");
 
-  const outPng = join(outDir, "before-after.png");
+  const outPng = join(outDir, `${stem}.png`);
   const chromePath = options.chromePath ?? resolveChrome();
   await screenshotHtml({
     chromePath,
     url: pathToFileURL(composePath).href,
     outPath: outPng,
-    width: 1400,
-    height: 900,
+    width: DEFAULT_VIEWPORT.width,
+    height: DEFAULT_VIEWPORT.height,
   });
   return outPng;
 }

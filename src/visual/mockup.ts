@@ -3,7 +3,12 @@ import { join } from "node:path";
 import { extractJson } from "../extract-json.js";
 import type { ChangeSummary } from "../schema.js";
 import type { Provider } from "../providers/index.js";
-import type { DiffFile } from "../git.js";
+import {
+  DEFAULT_VIEWPORT,
+  VIEWPORT_MAX_HEIGHT,
+  VIEWPORT_MAX_WIDTH,
+  clampViewport,
+} from "./viewport.js";
 
 export type MockupResult =
   | {
@@ -21,18 +26,22 @@ export async function generateMockup(options: {
   outDir: string;
   model?: string;
   log?: (msg: string) => void;
+  /** Prefix for written HTML files (e.g. visual-1-). */
+  filePrefix?: string;
 }): Promise<MockupResult> {
   const prompt = `You create faithful before/after HTML mockups from a git diff.
 
 Rules:
-- The diff contains exact before/after markup/styles. Emit two fully self-contained HTML documents (inline CSS, no external requests, system fonts) that render this exact markup with these exact styles.
+- The diff contains exact before/after markup/styles. Emit two fully self-contained HTML documents (inline CSS, no external requests) that render this exact markup with these exact styles.
 - Stub only the minimum: container width, placeholder text where dynamic props appear (realistic neutral placeholders).
 - Do not invent UI that is not present in the code.
 - Never show raw code listings.
+- FRAME LIMIT (hard): design for exactly ${VIEWPORT_MAX_WIDTH}x${VIEWPORT_MAX_HEIGHT}px. html/body must be width/height 100% with overflow:hidden. All content must fit in that single screen — no scrolling, no content cut off at the bottom. Prefer denser layout over tall pages.
+- Visual craft: one clear composition, strong typographic hierarchy, purposeful (non-default) web fonts via @import from fonts.googleapis.com or fonts.bunny.net if helpful, atmospheric background (subtle gradient or pattern — not flat single-color), high contrast for text. No purple-on-white clichés, no glow spam, no floating badge stickers on the mockup itself.
 - If you cannot render faithfully, return {"feasible": false, "reason": "..."}.
 
 Return JSON only:
-{"feasible": true, "before_html": "...", "after_html": "...", "viewport": {"width":1280,"height":900}}
+{"feasible": true, "before_html": "...", "after_html": "...", "viewport": {"width":${DEFAULT_VIEWPORT.width},"height":${DEFAULT_VIEWPORT.height}}}
 or {"feasible": false, "reason": "..."}
 
 Change summary context:
@@ -66,14 +75,15 @@ ${options.files
   }
 
   mkdirSync(options.outDir, { recursive: true });
-  const beforePath = join(options.outDir, "before.html");
-  const afterPath = join(options.outDir, "after.html");
+  const prefix = options.filePrefix ?? "";
+  const beforePath = join(options.outDir, `${prefix}before.html`);
+  const afterPath = join(options.outDir, `${prefix}after.html`);
   writeFileSync(beforePath, json.before_html, "utf8");
   writeFileSync(afterPath, json.after_html, "utf8");
   return {
     feasible: true,
     beforePath,
     afterPath,
-    viewport: json.viewport,
+    viewport: clampViewport(json.viewport),
   };
 }
