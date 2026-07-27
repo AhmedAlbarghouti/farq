@@ -145,6 +145,10 @@ function chromeOrNull(): string | null {
 
 const chrome = chromeOrNull();
 
+/** A cold Chrome start can take several seconds, well past vitest's default. */
+const CHROME_TEST_TIMEOUT_MS = 60_000;
+const CHROME_RUN_TIMEOUT_MS = 45_000;
+
 describe.skipIf(!chrome)("measured panel sizes", () => {
   function measure(html: string): Array<{ width: number; height: number }> {
     const dir = mkdtempSync(join(tmpdir(), "farq-measure-"));
@@ -161,7 +165,7 @@ describe.skipIf(!chrome)("measured panel sizes", () => {
           "--dump-dom",
           `file://${file}`,
         ],
-        { timeout: 30_000 },
+        { timeout: CHROME_RUN_TIMEOUT_MS },
       );
       return [...stdout.matchAll(/data-fit="(\d+)x(\d+)@/g)].map((m) => ({
         width: Number(m[1]),
@@ -172,36 +176,44 @@ describe.skipIf(!chrome)("measured panel sizes", () => {
     }
   }
 
-  it("matches MOCKUP_PANEL for both panels", () => {
-    const panels = measure(
-      buildMockupDocument({
-        theme: resolveTheme(),
-        title: "Measure",
-        beforeBody: "<p>x</p>",
-        afterBody: "<p>x</p>",
-      }),
-    );
-    expect(panels).toHaveLength(2);
-    for (const panel of panels) {
-      expect(panel).toEqual({
-        width: MOCKUP_PANEL.width,
-        height: MOCKUP_PANEL.height,
-      });
-    }
-  });
+  it(
+    "matches MOCKUP_PANEL for both panels",
+    () => {
+      const panels = measure(
+        buildMockupDocument({
+          theme: resolveTheme(),
+          title: "Measure",
+          beforeBody: "<p>x</p>",
+          afterBody: "<p>x</p>",
+        }),
+      );
+      expect(panels).toHaveLength(2);
+      for (const panel of panels) {
+        expect(panel).toEqual({
+          width: MOCKUP_PANEL.width,
+          height: MOCKUP_PANEL.height,
+        });
+      }
+    },
+    CHROME_TEST_TIMEOUT_MS,
+  );
 
-  it("matches DIAGRAM_PANEL", () => {
-    const panels = measure(
-      buildDiagramDocument({
-        theme: resolveTheme(),
-        title: "Measure",
-        body: "<p>x</p>",
-      }),
-    );
-    expect(panels).toEqual([
-      { width: DIAGRAM_PANEL.width, height: DIAGRAM_PANEL.height },
-    ]);
-  });
+  it(
+    "matches DIAGRAM_PANEL",
+    () => {
+      const panels = measure(
+        buildDiagramDocument({
+          theme: resolveTheme(),
+          title: "Measure",
+          body: "<p>x</p>",
+        }),
+      );
+      expect(panels).toEqual([
+        { width: DIAGRAM_PANEL.width, height: DIAGRAM_PANEL.height },
+      ]);
+    },
+    CHROME_TEST_TIMEOUT_MS,
+  );
 });
 
 describe("STYLE_CONTRACT", () => {
