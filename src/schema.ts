@@ -19,16 +19,27 @@ export const ChangeItemSchema = z.object({
   files: z.array(z.string()).default([]),
 });
 
+/**
+ * Grouping of items into visual topics, returned by the same call that writes
+ * the summary so the visual pipeline does not need its own round-trip.
+ */
+export const VisualTopicSchema = z.object({
+  title: z.string().min(1).max(80),
+  item_indices: z.array(z.number().int().nonnegative()).min(1),
+});
+
 export const ChangeSummarySchema = z.object({
   headline: z.string().min(1).max(140),
   overview: z.string().min(1),
   items: z.array(ChangeItemSchema).min(1),
   breaking_changes: z.array(z.string()).default([]),
   visual_notes: z.string().min(1).optional(),
+  visual_topics: z.array(VisualTopicSchema).optional(),
 });
 
 export type ChangeSummary = z.infer<typeof ChangeSummarySchema>;
 export type ChangeItem = z.infer<typeof ChangeItemSchema>;
+export type VisualTopicHint = z.infer<typeof VisualTopicSchema>;
 
 /** Compact schema description embedded in AI prompts. */
 export const CHANGE_SUMMARY_SCHEMA_PROMPT = `{
@@ -42,5 +53,9 @@ export const CHANGE_SUMMARY_SCHEMA_PROMPT = `{
     "files": ["string"]
   }],
   "breaking_changes": ["string"],
-  "visual_notes": "string (optional)"
+  "visual_notes": "string (optional)",
+  "visual_topics": [{
+    "title": "string <=80 — human topic name",
+    "item_indices": [0]
+  }]
 }`;

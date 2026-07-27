@@ -132,6 +132,45 @@ describe("topicsFromIntentJson", () => {
 });
 
 describe("clusterVisualTopics", () => {
+  it("uses visual_topics from the summary without calling the model", async () => {
+    const complete = vi.fn();
+    const topics = await clusterVisualTopics(
+      {
+        ...summary(multiFeatureItems),
+        visual_topics: [
+          { title: "Multi-visual pipeline", item_indices: [0, 1, 2, 3] },
+        ],
+      },
+      { provider: { name: "fake", complete } },
+    );
+    expect(topics).toHaveLength(1);
+    expect(topics[0]!.title).toBe("Multi-visual pipeline");
+    expect(complete).not.toHaveBeenCalled();
+  });
+
+  it("falls back to the model when summary topics do not cover every item", async () => {
+    const complete = vi.fn().mockResolvedValue(
+      JSON.stringify({ topics: [{ title: "All of it", item_indices: [0, 1, 2, 3] }] }),
+    );
+    const topics = await clusterVisualTopics(
+      {
+        ...summary(multiFeatureItems),
+        visual_topics: [{ title: "Partial", item_indices: [0] }],
+      },
+      { provider: { name: "fake", complete } },
+    );
+    expect(complete).toHaveBeenCalledTimes(1);
+    expect(topics[0]!.title).toBe("All of it");
+  });
+
+  it("merges down to maxTopics", async () => {
+    const topics = await clusterVisualTopics(summary(multiFeatureItems), {
+      maxTopics: 2,
+    });
+    expect(topics).toHaveLength(2);
+    expect(topics.flatMap((t) => t.items)).toHaveLength(4);
+  });
+
   it("uses intent clustering when provider returns one topic", async () => {
     const provider: Provider = {
       name: "fake",

@@ -16,7 +16,8 @@ describe("visual generation cascade", () => {
       .mockResolvedValueOnce(
         JSON.stringify({
           feasible: true,
-          html: "<html><body>diagram</body></html>",
+          css: ".col{color:var(--fq-text)}",
+          body: '<div class="col">diagram</div>',
         }),
       );
 

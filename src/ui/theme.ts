@@ -20,6 +20,10 @@ export function muted(text: string): string {
   return pc.dim(text);
 }
 
+export function dim(text: string): string {
+  return pc.dim(text);
+}
+
 export function isInteractive(): boolean {
   return Boolean(process.stderr.isTTY) && process.env.CI !== "true";
 }
