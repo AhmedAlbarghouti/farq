@@ -16,7 +16,16 @@ export class ChromeError extends Error {
   }
 }
 
+let cachedChromePath: string | null = null;
+
 export function resolveChrome(env: NodeJS.ProcessEnv = process.env): string {
+  if (env === process.env && cachedChromePath) return cachedChromePath;
+  const path = lookupChrome(env);
+  if (env === process.env) cachedChromePath = path;
+  return path;
+}
+
+function lookupChrome(env: NodeJS.ProcessEnv): string {
   const local = env.LOCALAPPDATA ?? "";
   const pf = env.ProgramFiles ?? "C:\\Program Files";
   const pf86 = env["ProgramFiles(x86)"] ?? "C:\\Program Files (x86)";
@@ -91,6 +100,13 @@ export async function screenshotHtml(
         "--headless=new",
         "--disable-gpu",
         "--hide-scrollbars",
+        "--no-first-run",
+        "--no-default-browser-check",
+        "--disable-extensions",
+        "--disable-background-networking",
+        "--disable-sync",
+        "--disable-dev-shm-usage",
+        "--force-color-profile=srgb",
         `--window-size=${width},${height}`,
         `--screenshot=${options.outPath}`,
         options.url,

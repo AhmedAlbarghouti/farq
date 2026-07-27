@@ -7,6 +7,7 @@ import {
 import type { Provider } from "./providers/index.js";
 import type { ToneName } from "./config.js";
 import type { GatherDiffResult } from "./git.js";
+import { MAX_VISUAL_TOPICS } from "./visual/cluster.js";
 
 export class SummarizeError extends Error {
   readonly exitCode = 2;
@@ -91,6 +92,12 @@ Rules:
 - Report only what the diff shows. Do not invent work.
 - ${toneRules}
 ${convention}
+visual_topics — how the items get grouped into before/after visuals:
+- Every item index must appear in exactly one topic. Use 0-based indices into your own items array.
+- If all items advance the SAME feature or story, return exactly ONE topic containing every index, even across many files, tests, docs and plumbing.
+- Only split when a reviewer would call them separate product changes (say, a UI redesign AND an unrelated billing API).
+- At most ${MAX_VISUAL_TOPICS} topics. Fewer is better; one is right when unsure.
+
 Schema:
 ${CHANGE_SUMMARY_SCHEMA_PROMPT}
 

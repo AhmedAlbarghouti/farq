@@ -2,8 +2,25 @@ import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
+import { isThemeName, type ThemeName } from "./visual/design.js";
+
 export type ProviderName = "claude" | "opencode" | "fake";
 export type ToneName = "technical" | "client";
+
+export type VisualConfig = {
+  /** Palette used by every generated mockup and diagram. */
+  theme?: ThemeName;
+  /** Override the single accent color within the chosen theme. */
+  accent?: string;
+  /** Optional webfont stylesheet; omitted keeps renders offline and fast. */
+  fontImport?: string;
+  fontSans?: string;
+  fontDisplay?: string;
+  /** Upper bound on generated visuals (each one costs a model call). */
+  maxTopics?: number;
+  /** How many visuals to generate at once. */
+  concurrency?: number;
+};
 
 export type FarqConfig = {
   provider?: ProviderName;
@@ -12,6 +29,7 @@ export type FarqConfig = {
     claudeCheap?: string;
     opencodeCheap?: string;
   };
+  visual?: VisualConfig;
 };
 
 export type LoadConfigOptions = {
@@ -47,10 +65,15 @@ export function mergeConfig(
     ...base.models,
     ...stripUndefined(override.models ?? {}),
   };
+  const visual = {
+    ...base.visual,
+    ...stripUndefined(override.visual ?? {}),
+  };
 
   if (provider !== undefined) out.provider = provider;
   if (tone !== undefined) out.tone = tone;
   if (Object.keys(models).length > 0) out.models = models;
+  if (Object.keys(visual).length > 0) out.visual = visual;
   return out;
 }
 
@@ -94,6 +117,21 @@ function sanitize(data: FarqConfig): FarqConfig {
       models.opencodeCheap = data.models.opencodeCheap;
     }
     if (Object.keys(models).length > 0) out.models = models;
+  }
+  if (data.visual && typeof data.visual === "object") {
+    const visual: VisualConfig = {};
+    if (isThemeName(data.visual.theme)) visual.theme = data.visual.theme;
+    for (const key of ["accent", "fontImport", "fontSans", "fontDisplay"] as const) {
+      const value = data.visual[key];
+      if (typeof value === "string" && value.trim()) visual[key] = value.trim();
+    }
+    for (const key of ["maxTopics", "concurrency"] as const) {
+      const value = data.visual[key];
+      if (typeof value === "number" && Number.isFinite(value) && value >= 1) {
+        visual[key] = Math.floor(value);
+      }
+    }
+    if (Object.keys(visual).length > 0) out.visual = visual;
   }
   return out;
 }

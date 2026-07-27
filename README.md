@@ -91,11 +91,24 @@ Validated change summary plus an `images` array of produced file paths.
 
 ## Images (honesty policy)
 
-- Visuals come from the diff only. A cheap model groups summary items into **up to 5** visual topics by intent (same feature → one image; truly unrelated domains → separate). File-overlap is the fallback if that grouping fails. UI markup gets a mockup attempt; everything else gets a small concept flowchart/diagram. Screenshots are capped at **1280×720** so content must fit the frame (no tall cut-off pages). If a topic is infeasible, it is skipped (still exit 0).
-- Generated compositions include a small **generated preview** badge.
+- Visuals come from the diff only. The summarize call also returns the grouping of items into **up to 5** visual topics by intent (same feature → one image; truly unrelated domains → separate), so no extra model round-trip is spent on it. A dedicated grouping call, then file-overlap, are the fallbacks. UI markup gets a mockup attempt; everything else gets a small concept flowchart. If a topic is infeasible, it is skipped (still exit 0).
+- Every visual is **1280×720** and carries a small **generated preview** badge.
 - Diagrams stay conceptual — no code dumps.
 - Missing Chrome / visual failure **soft-degrades** to text-only with a stderr warning (exit 0), unless you passed `--before`/`--after` (then hard-fail).
 - A local image path will not render on GitHub until the file is attached or uploaded. `--open` tries a best-effort upload (and rewrites stdout to the hosted URL).
+
+### Consistent visual style
+
+farq owns the page frame — background, header, Before/After labels, badge, typography and the colour palette. The model only fills in the two panel interiors, and it must draw every colour, font and radius from a fixed set of CSS custom properties (`--fq-accent`, `--fq-text-muted`, `--fq-surface`, …). The only literals it may use are colours the diff states outright. That is what keeps two runs on two branches looking like the same product.
+
+Two palettes ship today, `midnight` (default) and `daylight`:
+
+```bash
+farq pr --theme daylight
+farq pr --accent "#ff5722"
+```
+
+Content is measured and scaled to fit the frame after rendering, so a tall mockup shrinks instead of getting clipped, and the model is not asked to guess at pixel budgets.
 
 ## Config
 
@@ -111,9 +124,17 @@ Precedence: **flags → project → global**.
   "models": {
     "claudeCheap": "haiku",
     "opencodeCheap": "provider/model"
+  },
+  "visual": {
+    "theme": "midnight",
+    "accent": "#4dd0e1",
+    "maxTopics": 3,
+    "concurrency": 3
   }
 }
 ```
+
+`visual.maxTopics` caps how many images a run may generate (each costs one model call), and `visual.concurrency` is how many are generated at once. `visual.fontImport` can point at a webfont stylesheet; leaving it unset keeps rendering offline and fast.
 
 If both `claude` and `opencode` are installed and nothing is configured, farq uses **claude** and prints how to override (no interactive prompt).
 
@@ -128,6 +149,9 @@ If both `claude` and `opencode` are installed and nothing is configured, farq us
 | `--no-images` | skip visuals |
 | `-o, --out` | image output dir (default: OS user cache, outside the repo) |
 | `--model-cheap` | cheap model id for visuals |
+| `--theme` | visual palette: `midnight` \| `daylight` |
+| `--accent` | override the theme accent colour |
+| `--max-visuals` | cap generated visuals (1–5) |
 | `-v, --verbose` | verbose logs (incl. `feasible: false` reasons) |
 | `--open` | (`pr` only) create PR with `gh` |
 
@@ -140,6 +164,31 @@ If both `claude` and `opencode` are installed and nothing is configured, farq us
 | `2` | AI failure after retry / timeout |
 
 Progress → **stderr**. Artifact → **stdout**.
+
+## Progress output
+
+Each stage is numbered, names what it is doing, and reports how long it took:
+
+```
+farq ⠹ [2/3] summary · claude is naming things (hard part)… · 11s
+farq ✓ summarized with claude 12.4s
+farq ⠸ [3/3] visuals · claude is sketching the after… · 1/3 · Refund status badge · 8s
+farq ✓ 3 visuals ready 41.2s
+```
+
+Non-interactive terminals (CI, pipes) get one plain line per stage transition instead of a spinner.
+
+## Speed
+
+A `farq pr` run makes as few model calls as it can, and overlaps everything that does not depend on the model:
+
+- Provider detection, the diff and the `gh` title lookup all start at once.
+- Topic grouping rides along on the summarize response instead of being its own request.
+- File contents for the visuals are read while the summary is still being written.
+- Each visual is a **single** HTML document with one shared stylesheet — roughly half the tokens of emitting two standalone pages, and one Chrome screenshot instead of three.
+- Visuals for different topics are generated in parallel (`visual.concurrency`).
+
+If a run still feels slow, the lever with the most travel is `--model-cheap` (for example `haiku`), followed by `--max-visuals 1`.
 
 ## Repository ops
 

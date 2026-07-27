@@ -64,4 +64,11 @@ export function getProvider(name: ProviderName): Provider {
   }
 }
 
-export { FAKE_SUMMARY, FAKE_BEFORE_HTML, FAKE_AFTER_HTML } from "./fake.js";
+export {
+  FAKE_SUMMARY,
+  FAKE_MOCKUP_CSS,
+  FAKE_BEFORE_BODY,
+  FAKE_AFTER_BODY,
+  FAKE_DIAGRAM_CSS,
+  FAKE_DIAGRAM_BODY,
+} from "./fake.js";

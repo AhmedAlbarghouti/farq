@@ -3,6 +3,7 @@ import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { defaultOutDir } from "../paths.js";
 import { resolveChrome, screenshotHtml, ChromeError } from "./chrome.js";
+import { buildComposeDocument, resolveTheme, type Theme } from "./design.js";
 import { DEFAULT_VIEWPORT } from "./viewport.js";
 
 export type ComposeOptions = {
@@ -10,7 +11,9 @@ export type ComposeOptions = {
   outDir?: string;
   beforePath: string;
   afterPath: string;
-  badge?: "generated preview" | "before / after";
+  badge?: string;
+  title?: string;
+  theme?: Theme;
   chromePath?: string;
   /** Output PNG basename (default before-after.png). */
   outFileName?: string;
@@ -20,34 +23,16 @@ export function buildComposeHtml(options: {
   beforeBase64: string;
   afterBase64: string;
   badge: string;
+  title?: string;
+  theme?: Theme;
 }): string {
-  const { beforeBase64, afterBase64, badge } = options;
-  return `<!doctype html>
-<html><head><meta charset="utf-8" />
-<style>
-  html,body{margin:0;background:#1b1d21;color:#e8e8e8;font-family:system-ui,sans-serif}
-  .wrap{padding:24px}
-  .badge{position:fixed;top:12px;right:12px;font-size:11px;letter-spacing:.04em;text-transform:uppercase;
-    background:#2a2e35;border:1px solid #3a3f48;padding:4px 8px;border-radius:4px;opacity:.9}
-  .grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
-  h2{margin:0 0 10px;font-size:14px;font-weight:600;color:#b9c0c9}
-  img{width:100%;height:auto;background:#0f1114;border:1px solid #2f343d;border-radius:6px;display:block}
-</style></head>
-<body>
-  <div class="badge">${escapeHtml(badge)}</div>
-  <div class="wrap"><div class="grid">
-    <section><h2>Before</h2><img alt="Before" src="data:image/png;base64,${beforeBase64}" /></section>
-    <section><h2>After</h2><img alt="After" src="data:image/png;base64,${afterBase64}" /></section>
-  </div></div>
-</body></html>`;
-}
-
-function escapeHtml(s: string): string {
-  return s
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;");
+  return buildComposeDocument({
+    theme: options.theme ?? resolveTheme(),
+    title: options.title ?? "Before / after",
+    beforeBase64: options.beforeBase64,
+    afterBase64: options.afterBase64,
+    badge: options.badge,
+  });
 }
 
 export async function composeBeforeAfter(
@@ -59,11 +44,12 @@ export async function composeBeforeAfter(
 
   const before = readFileSync(options.beforePath);
   const after = readFileSync(options.afterPath);
-  const badge = options.badge ?? "generated preview";
   const html = buildComposeHtml({
     beforeBase64: before.toString("base64"),
     afterBase64: after.toString("base64"),
-    badge,
+    badge: options.badge ?? "before / after",
+    title: options.title,
+    theme: options.theme,
   });
 
   const stem = (options.outFileName ?? "before-after.png").replace(

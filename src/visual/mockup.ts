@@ -4,45 +4,49 @@ import { extractJson } from "../extract-json.js";
 import type { ChangeSummary } from "../schema.js";
 import type { Provider } from "../providers/index.js";
 import {
-  DEFAULT_VIEWPORT,
-  VIEWPORT_MAX_HEIGHT,
-  VIEWPORT_MAX_WIDTH,
-  clampViewport,
-} from "./viewport.js";
+  DEFAULT_MOCKUP_STAGE_WIDTH,
+  MOCKUP_PANEL,
+  STYLE_CONTRACT,
+  buildMockupDocument,
+  resolveTheme,
+  type Theme,
+} from "./design.js";
 
 export type MockupResult =
-  | {
-      feasible: true;
-      beforePath: string;
-      afterPath: string;
-      viewport?: { width: number; height: number };
-    }
+  | { feasible: true; htmlPath: string }
   | { feasible: false; reason: string };
 
-export async function generateMockup(options: {
-  provider: Provider;
-  summary: ChangeSummary;
-  files: Array<{ path: string; before: string; after: string }>;
-  outDir: string;
-  model?: string;
-  log?: (msg: string) => void;
-  /** Prefix for written HTML files (e.g. visual-1-). */
-  filePrefix?: string;
-}): Promise<MockupResult> {
-  const prompt = `You create faithful before/after HTML mockups from a git diff.
+export type MockupFile = { path: string; before: string; after: string };
 
-Rules:
-- The diff contains exact before/after markup/styles. Emit two fully self-contained HTML documents (inline CSS, no external requests) that render this exact markup with these exact styles.
-- Stub only the minimum: container width, placeholder text where dynamic props appear (realistic neutral placeholders).
-- Do not invent UI that is not present in the code.
-- Never show raw code listings.
-- FRAME LIMIT (hard): design for exactly ${VIEWPORT_MAX_WIDTH}x${VIEWPORT_MAX_HEIGHT}px. html/body must be width/height 100% with overflow:hidden. All content must fit in that single screen — no scrolling, no content cut off at the bottom. Prefer denser layout over tall pages.
-- Visual craft: one clear composition, strong typographic hierarchy, purposeful (non-default) web fonts via @import from fonts.googleapis.com or fonts.bunny.net if helpful, atmospheric background (subtle gradient or pattern — not flat single-color), high contrast for text. No purple-on-white clichés, no glow spam, no floating badge stickers on the mockup itself.
-- If you cannot render faithfully, return {"feasible": false, "reason": "..."}.
+export function buildMockupPrompt(options: {
+  summary: ChangeSummary;
+  files: MockupFile[];
+}): string {
+  return `You turn a git diff into a faithful before/after UI mockup.
+
+farq supplies the page frame: background, header, Before/After labels, the badge, and automatic scale-to-fit. You supply only the two panel interiors. Never recreate the frame.
+
+Each panel renders into a ${MOCKUP_PANEL.width}x${MOCKUP_PANEL.height}px box. Compose for that box: show the changed component and just enough surrounding context to place it. This is a close-up, not a whole application screen — no site nav, no sidebars, no footer, unless the diff changes those. Anything you design wider than the box gets scaled down and becomes hard to read.
+
+Produce:
+- "before_body" / "after_body": HTML fragments for the two states. No <html>, <head>, <body>, <style> or <script> tags.
+- "css": one stylesheet shared by both fragments.
+- "before_css" / "after_css" (optional): rules for one state only. farq scopes them for you, so keep the same class names in both fragments and put the differences here.
+- "stage_width": the pixel width you designed against. Default ${DEFAULT_MOCKUP_STAGE_WIDTH}; use 390 for a phone view. Never exceed ${MOCKUP_PANEL.width}.
+
+Fidelity rules:
+- Render the markup and styles the diff actually shows. Do not invent UI that is not in the code.
+- Stub only what is dynamic: realistic placeholder copy for props and data.
+- The only visible difference between the panels must be the change itself. Do not redesign anything else.
+- Whatever the diff adds must be easy to see: give it at least the weight of the content around it, never the faintest token on the panel. Do not add callouts, arrows or highlight boxes to point at it.
+- Never render raw code, diff text, or file paths as content.
+- If the diff contains no renderable UI, decline instead of guessing.
+
+${STYLE_CONTRACT}
 
 Return JSON only:
-{"feasible": true, "before_html": "...", "after_html": "...", "viewport": {"width":${DEFAULT_VIEWPORT.width},"height":${DEFAULT_VIEWPORT.height}}}
-or {"feasible": false, "reason": "..."}
+{"feasible":true,"css":"...","before_css":"...","after_css":"...","before_body":"...","after_body":"...","stage_width":${DEFAULT_MOCKUP_STAGE_WIDTH}}
+or {"feasible":false,"reason":"..."}
 
 Change summary context:
 ${JSON.stringify(options.summary, null, 2)}
@@ -55,14 +59,35 @@ ${options.files
   )
   .join("\n\n")}
 `;
+}
+
+export async function generateMockup(options: {
+  provider: Provider;
+  summary: ChangeSummary;
+  files: MockupFile[];
+  outDir: string;
+  model?: string;
+  theme?: Theme;
+  title?: string;
+  log?: (msg: string) => void;
+  /** Prefix for the written HTML file (e.g. visual-1-). */
+  filePrefix?: string;
+}): Promise<MockupResult> {
+  const prompt = buildMockupPrompt({
+    summary: options.summary,
+    files: options.files,
+  });
 
   const raw = await options.provider.complete(prompt, { model: options.model });
   const json = extractJson(raw) as {
     feasible?: boolean;
     reason?: string;
-    before_html?: string;
-    after_html?: string;
-    viewport?: { width: number; height: number };
+    css?: string;
+    before_css?: string;
+    after_css?: string;
+    before_body?: string;
+    after_body?: string;
+    stage_width?: number;
   };
 
   if (!json.feasible) {
@@ -70,20 +95,26 @@ ${options.files
     return { feasible: false, reason: json.reason ?? "not feasible" };
   }
 
-  if (!json.before_html || !json.after_html) {
-    return { feasible: false, reason: "missing before_html/after_html" };
+  if (!json.before_body || !json.after_body) {
+    return { feasible: false, reason: "missing before_body/after_body" };
   }
 
+  const html = buildMockupDocument({
+    theme: options.theme ?? resolveTheme(),
+    title: options.title ?? options.summary.headline,
+    css: json.css,
+    beforeCss: json.before_css,
+    afterCss: json.after_css,
+    beforeBody: json.before_body,
+    afterBody: json.after_body,
+    stageWidth: json.stage_width,
+  });
+
   mkdirSync(options.outDir, { recursive: true });
-  const prefix = options.filePrefix ?? "";
-  const beforePath = join(options.outDir, `${prefix}before.html`);
-  const afterPath = join(options.outDir, `${prefix}after.html`);
-  writeFileSync(beforePath, json.before_html, "utf8");
-  writeFileSync(afterPath, json.after_html, "utf8");
-  return {
-    feasible: true,
-    beforePath,
-    afterPath,
-    viewport: clampViewport(json.viewport),
-  };
+  const htmlPath = join(
+    options.outDir,
+    `${options.filePrefix ?? ""}mockup.html`,
+  );
+  writeFileSync(htmlPath, html, "utf8");
+  return { feasible: true, htmlPath };
 }

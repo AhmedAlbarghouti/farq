@@ -14,12 +14,29 @@ describe("fake provider", () => {
     expect(parsed.headline).toBe(FAKE_SUMMARY.headline);
   });
 
-  it("returns a mockup payload when asked for HTML", async () => {
+  it("returns a mockup payload when asked for panel bodies", async () => {
     const provider = getProvider("fake");
-    const raw = await provider.complete('return {"feasible":true,"before_html":"..."}');
-    const parsed = JSON.parse(raw) as { feasible: boolean; before_html: string };
+    const raw = await provider.complete(
+      'return {"feasible":true,"before_body":"...","after_body":"..."}',
+    );
+    const parsed = JSON.parse(raw) as {
+      feasible: boolean;
+      before_body: string;
+      after_body: string;
+      css: string;
+    };
     expect(parsed.feasible).toBe(true);
-    expect(parsed.before_html).toContain("<html>");
+    expect(parsed.before_body).toContain("<div");
+    expect(parsed.after_body).toContain("Refund status");
+    expect(parsed.css).toContain("var(--fq-");
+  });
+
+  it("returns a diagram payload when asked for a flowchart", async () => {
+    const provider = getProvider("fake");
+    const raw = await provider.complete("draw a before/after flowchart");
+    const parsed = JSON.parse(raw) as { feasible: boolean; body: string };
+    expect(parsed.feasible).toBe(true);
+    expect(parsed.body).toContain("<div");
   });
 });
 

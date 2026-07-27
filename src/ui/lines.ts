@@ -1,57 +1,96 @@
 import type { ProviderName } from "../config.js";
 
-const SUMMARIZE: Record<ProviderName, string[]> = {
-  claude: [
-    "claude is reading the diff…",
-    "claude is grouping the mess…",
-    "claude is writing the blurb…",
+/**
+ * Rotating status lines. `{p}` is replaced with the provider name so a line
+ * always says who is doing the work. Keep templates <= 37 chars so the longest
+ * provider name still fits the one-line spinner.
+ */
+const BANKS = {
+  diff: [
+    "gathering the diff…",
+    "asking git politely…",
+    "reading what you actually did…",
+    "diffing against the merge base…",
+    "counting the damage…",
   ],
-  opencode: [
-    "opencode is reading the diff…",
-    "opencode is grouping the mess…",
-    "opencode is writing the blurb…",
+  summarize: [
+    "{p} is reading the diff…",
+    "{p} is grouping the mess…",
+    "{p} is finding the story…",
+    "{p} is naming things (hard part)…",
+    "{p} is deciding what matters…",
+    "{p} is skipping the boring parts…",
+    "{p} is drafting your PR title…",
+    "{p} is writing the blurb…",
   ],
-  fake: [
-    "fake is vibing on hard mode…",
-    "fake is inventing nothing new…",
-    "fake is shipping canned vibes…",
+  topics: [
+    "planning the visuals…",
+    "splitting the story into scenes…",
+    "deciding how many pictures…",
+    "grouping changes into topics…",
   ],
-};
-
-const VISUAL: Record<ProviderName, string[]> = {
-  claude: [
-    "claude is sketching a mockup…",
-    "claude is boxing a flowchart…",
+  mockup: [
+    "{p} is sketching the before…",
+    "{p} is sketching the after…",
+    "{p} is laying out the mockup…",
+    "{p} is writing placeholder copy…",
+    "{p} is obeying the design tokens…",
+    "{p} is resisting a redesign…",
+    "{p} is measuring the spacing…",
+  ],
+  diagram: [
+    "{p} is boxing a flowchart…",
+    "{p} is drawing arrows…",
+    "{p} is explaining it with boxes…",
+    "{p} is keeping it conceptual…",
+    "{p} is deleting a wall of text…",
+  ],
+  shoot: [
     "chrome is taking the shot…",
+    "chrome is scaling it to fit…",
+    "waiting on headless chrome…",
+    "pressing the shutter…",
   ],
-  opencode: [
-    "opencode is sketching a mockup…",
-    "opencode is boxing a flowchart…",
-    "chrome is taking the shot…",
+  visual: [
+    "{p} is drawing the difference…",
+    "{p} is picking a composition…",
+    "chrome is warming up…",
+    "making the change look obvious…",
   ],
-  fake: [
-    "fake is drawing boxes…",
-    "fake is pretending to design…",
-    "chrome is taking the shot…",
+  open: [
+    "talking to gh…",
+    "filling the PR template…",
+    "uploading the visuals…",
+    "shipping the PR body…",
+    "almost there…",
   ],
-};
+} satisfies Record<string, string[]>;
 
-const OPEN = [
-  "talking to gh…",
-  "shipping the PR body…",
-  "almost there…",
-];
+export type LineBank = keyof typeof BANKS;
 
-export type LineBank = "summarize" | "visual" | "open" | "diff";
+export function linesFor(bank: LineBank, provider?: ProviderName): string[] {
+  const name = provider ?? "claude";
+  return BANKS[bank].map((line) => line.replaceAll("{p}", name));
+}
 
-export function linesFor(
-  bank: LineBank,
-  provider?: ProviderName,
-): string[] {
-  if (bank === "diff") {
-    return ["gathering the diff…", "asking git politely…"];
+/** Short, honest name for the stage — the witty line sits next to it. */
+export function labelFor(bank: LineBank): string {
+  switch (bank) {
+    case "diff":
+      return "diff";
+    case "summarize":
+      return "summary";
+    case "topics":
+      return "planning";
+    case "mockup":
+      return "mockup";
+    case "diagram":
+      return "diagram";
+    case "shoot":
+      return "capture";
+    case "visual":
+      return "visuals";
+    case "open":
+      return "pull request";
   }
-  if (bank === "open") return OPEN;
-  const p = provider ?? "claude";
-  return bank === "summarize" ? SUMMARIZE[p] : VISUAL[p];
 }

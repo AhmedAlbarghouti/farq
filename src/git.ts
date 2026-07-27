@@ -1,4 +1,7 @@
 import { execa } from "execa";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { mapWithConcurrency } from "./concurrency.js";
 
 export const SUMMARY_DIFF_BUDGET = 150_000;
 export const VISUAL_DIFF_BUDGET = 60_000;
@@ -85,31 +88,55 @@ export async function getFileAtRef(
   }
 }
 
+export type VisualFile = { path: string; before: string; after: string };
+
+/** Cap on git subprocesses spawned to build visual context. */
+const MAX_VISUAL_FILES = 40;
+const VISUAL_READ_CONCURRENCY = 8;
+
 /** Size-capped before/after pairs for visual generation. */
 export async function gatherVisualFileContents(
   cwd: string,
   files: DiffFile[],
   baseRef: string | null,
-  budget = VISUAL_DIFF_BUDGET,
-): Promise<Array<{ path: string; before: string; after: string }>> {
-  const out: Array<{ path: string; before: string; after: string }> = [];
-  let used = 0;
+  options: { budget?: number; mode?: GatherDiffResult["mode"] } = {},
+): Promise<VisualFile[]> {
+  const budget = options.budget ?? VISUAL_DIFF_BUDGET;
+  const worktree = options.mode === "worktree";
+  const targets = files.slice(0, MAX_VISUAL_FILES);
 
-  for (const file of files) {
+  const fetched = await mapWithConcurrency(
+    targets,
+    VISUAL_READ_CONCURRENCY,
+    async (file): Promise<VisualFile> => {
+      const [before, after] = await Promise.all([
+        baseRef ? getFileAtRef(cwd, baseRef, file.path) : Promise.resolve(""),
+        // In worktree mode HEAD still holds the *old* content, so read from disk.
+        worktree
+          ? readWorktreeFile(cwd, file.path)
+          : getFileAtRef(cwd, "HEAD", file.path),
+      ]);
+      return {
+        path: file.path,
+        before: before ?? "",
+        after: after ?? (await readWorktreeFile(cwd, file.path)) ?? "",
+      };
+    },
+  );
+
+  const out: VisualFile[] = [];
+  let used = 0;
+  for (const file of fetched) {
     if (used >= budget) break;
-    const before = baseRef
-      ? ((await getFileAtRef(cwd, baseRef, file.path)) ?? "")
-      : "";
-    const after =
-      (await getFileAtRef(cwd, "HEAD", file.path)) ??
-      (await readWorktreeFile(cwd, file.path)) ??
-      "";
-    const chunk = before.length + after.length;
+    const chunk = file.before.length + file.after.length;
     if (used + chunk > budget && out.length > 0) break;
     out.push({
       path: file.path,
-      before: before.slice(0, budget - used),
-      after: after.slice(0, Math.max(0, budget - used - before.length)),
+      before: file.before.slice(0, budget - used),
+      after: file.after.slice(
+        0,
+        Math.max(0, budget - used - file.before.length),
+      ),
     });
     used += Math.min(chunk, budget - used);
   }
@@ -122,14 +149,11 @@ async function gatherRangeDiff(
   budget: number,
 ): Promise<GatherDiffResult> {
   const [baseRef, headRef] = splitRange(range);
-  const nameStatus = await git(cwd, [
-    "diff",
-    "--name-status",
-    "--find-renames",
-    range,
+  const [nameStatus, patch, commits] = await Promise.all([
+    git(cwd, ["diff", "--name-status", "--find-renames", range]),
+    git(cwd, ["diff", "--find-renames", "--unified=5", range]),
+    listCommits(cwd, range),
   ]);
-  const patch = await git(cwd, ["diff", "--find-renames", "--unified=5", range]);
-  const commits = await listCommits(cwd, range);
   const files = parseNameStatus(nameStatus.stdout, patch.stdout);
   const { text, truncated } = capText(patch.stdout, budget);
 
@@ -149,14 +173,11 @@ async function gatherWorktreeDiff(
   cwd: string,
   budget: number,
 ): Promise<GatherDiffResult> {
-  const nameStatus = await git(cwd, [
-    "diff",
-    "HEAD",
-    "--name-status",
-    "--find-renames",
+  const [nameStatus, patch, untracked] = await Promise.all([
+    git(cwd, ["diff", "HEAD", "--name-status", "--find-renames"]),
+    git(cwd, ["diff", "HEAD", "--find-renames", "--unified=5"]),
+    listUntracked(cwd),
   ]);
-  const patch = await git(cwd, ["diff", "HEAD", "--find-renames", "--unified=5"]);
-  const untracked = await listUntracked(cwd);
 
   const files = parseNameStatus(nameStatus.stdout, patch.stdout);
   let diffText = patch.stdout;
@@ -255,8 +276,6 @@ async function readWorktreeFile(
   filePath: string,
 ): Promise<string | null> {
   try {
-    const { readFileSync } = await import("node:fs");
-    const { join } = await import("node:path");
     return readFileSync(join(cwd, filePath), "utf8");
   } catch {
     return null;

@@ -12,18 +12,23 @@ export type VisualTopic = {
 };
 
 /**
- * Prefer intent clustering via the cheap model; fall back to file-overlap.
+ * Topic grouping, cheapest source first:
+ *   1. visual_topics returned by the summarize call (free — no extra request)
+ *   2. a dedicated cheap-model call
+ *   3. file-overlap union-find
  * Same-theme items (one feature across many files) → one topic.
- * Truly unrelated domains → separate topics (cap 5).
+ * Truly unrelated domains → separate topics.
  */
 export async function clusterVisualTopics(
   summary: ChangeSummary,
   options?: {
     provider?: Provider;
     model?: string;
+    maxTopics?: number;
     log?: (msg: string) => void;
   },
 ): Promise<VisualTopic[]> {
+  const limit = normalizeLimit(options?.maxTopics);
   const items = summary.items;
   if (items.length === 0) return [];
   if (items.length === 1) {
@@ -37,6 +42,18 @@ export async function clusterVisualTopics(
     ];
   }
 
+  const fromSummary = topicsFromIntentJson(summary, {
+    topics: summary.visual_topics,
+  });
+  if (fromSummary) {
+    options?.log?.(
+      `visual topics (from summary): ${fromSummary.length} — ${fromSummary
+        .map((t) => t.title)
+        .join("; ")}`,
+    );
+    return capTopics(fromSummary, limit);
+  }
+
   if (options?.provider) {
     try {
       const ai = await clusterByIntent(summary, options.provider, options.model);
@@ -44,7 +61,7 @@ export async function clusterVisualTopics(
         options.log?.(
           `visual topics (intent): ${ai.length} — ${ai.map((t) => t.title).join("; ")}`,
         );
-        return ai;
+        return capTopics(ai, limit);
       }
       options.log?.("visual topic intent clustering failed; using file overlap");
     } catch (err) {
@@ -53,7 +70,14 @@ export async function clusterVisualTopics(
     }
   }
 
-  return clusterByFileOverlap(summary);
+  return capTopics(clusterByFileOverlap(summary), limit);
+}
+
+function normalizeLimit(value?: number): number {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 1) {
+    return MAX_VISUAL_TOPICS;
+  }
+  return Math.min(MAX_VISUAL_TOPICS, Math.floor(value));
 }
 
 /** File-overlap union-find (fallback). Exported for tests. */
@@ -90,32 +114,42 @@ export function clusterByFileOverlap(summary: ChangeSummary): VisualTopic[] {
     groups.set(root, list);
   }
 
-  let clusters: VisualTopic[] = [...groups.values()].map((groupItems, idx) => ({
-    id: idx + 1,
-    title: topicTitle(groupItems),
-    items: groupItems,
-    files: uniqueFiles(groupItems),
-  }));
+  const clusters: VisualTopic[] = [...groups.values()].map(
+    (groupItems, idx) => ({
+      id: idx + 1,
+      title: topicTitle(groupItems),
+      items: groupItems,
+      files: uniqueFiles(groupItems),
+    }),
+  );
 
-  while (clusters.length > MAX_VISUAL_TOPICS) {
-    clusters.sort(
+  return capTopics(clusters, MAX_VISUAL_TOPICS);
+}
+
+/** Merge the smallest topics until at most `limit` remain. */
+export function capTopics(
+  topics: VisualTopic[],
+  limit = MAX_VISUAL_TOPICS,
+): VisualTopic[] {
+  let clusters = topics;
+  while (clusters.length > limit) {
+    clusters = [...clusters].sort(
       (a, b) =>
         a.items.length - b.items.length || a.files.length - b.files.length,
     );
     const smallest = clusters[0]!;
     const next = clusters[1]!;
-    const rest = clusters.slice(2);
+    const merged = [...smallest.items, ...next.items];
     clusters = [
       {
         id: 0,
-        title: topicTitle([...smallest.items, ...next.items]),
-        items: [...smallest.items, ...next.items],
-        files: uniqueFiles([...smallest.items, ...next.items]),
+        title: topicTitle(merged),
+        items: merged,
+        files: uniqueFiles(merged),
       },
-      ...rest,
+      ...clusters.slice(2),
     ];
   }
-
   return finalizeTopics(clusters);
 }
 

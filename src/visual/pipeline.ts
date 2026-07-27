@@ -3,8 +3,9 @@ import { basename, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import type { ChangeSummary } from "../schema.js";
 import type { Provider } from "../providers/index.js";
-import type { DiffFile, GatherDiffResult } from "../git.js";
+import type { DiffFile, GatherDiffResult, VisualFile } from "../git.js";
 import { gatherVisualFileContents } from "../git.js";
+import { mapWithConcurrency } from "../concurrency.js";
 import { decideGate } from "./gate.js";
 import { generateMockup } from "./mockup.js";
 import { generateDiagram } from "./diagram.js";
@@ -12,7 +13,10 @@ import { clusterVisualTopics, type VisualTopic } from "./cluster.js";
 import { defaultOutDir } from "../paths.js";
 import { composeBeforeAfter, ChromeError } from "./compose.js";
 import { screenshotHtml, resolveChrome } from "./chrome.js";
-import { DEFAULT_VIEWPORT, clampViewport } from "./viewport.js";
+import { resolveTheme, type Theme } from "./design.js";
+import { DEFAULT_VIEWPORT } from "./viewport.js";
+
+export const DEFAULT_VISUAL_CONCURRENCY = 3;
 
 export type VisualImage = {
   path: string;
@@ -27,6 +31,14 @@ export type VisualPipelineResult = {
   warning?: string;
 };
 
+/** Structured events so the CLI can show what is actually happening. */
+export type VisualProgress =
+  | { kind: "topics"; total: number }
+  | { kind: "topic-start"; title: string; mode: "mockup" | "diagram" }
+  | { kind: "topic-fallback"; title: string }
+  | { kind: "topic-shot"; title: string }
+  | { kind: "topic-done"; title: string; ok: boolean; done: number; total: number };
+
 export type VisualPipelineOptions = {
   cwd?: string;
   outDir?: string;
@@ -37,8 +49,14 @@ export type VisualPipelineOptions = {
   noImages?: boolean;
   before?: string;
   after?: string;
+  theme?: Theme;
+  maxTopics?: number;
+  concurrency?: number;
+  /** Pre-fetched before/after file contents; avoids git work in the hot path. */
+  visualFiles?: Promise<VisualFile[]> | VisualFile[];
   verbose?: boolean;
   log?: (msg: string) => void;
+  onProgress?: (event: VisualProgress) => void;
 };
 
 export async function runVisualPipeline(
@@ -47,6 +65,8 @@ export async function runVisualPipeline(
   const cwd = options.cwd ?? process.cwd();
   const outDir = resolve(cwd, options.outDir ?? defaultOutDir(cwd));
   const log = options.log ?? (() => undefined);
+  const theme = options.theme ?? resolveTheme();
+  const emit = options.onProgress ?? (() => undefined);
   const vlog = (msg: string) => {
     if (options.verbose) log(msg);
   };
@@ -65,6 +85,8 @@ export async function runVisualPipeline(
       const composed = await composeBeforeAfter({
         cwd,
         outDir,
+        theme,
+        title: options.summary.headline,
         beforePath: beforeCopy,
         afterPath: afterCopy,
         badge: "before / after",
@@ -90,37 +112,62 @@ export async function runVisualPipeline(
   const topics = await clusterVisualTopics(options.summary, {
     provider: options.provider,
     model: options.modelCheap,
+    maxTopics: options.maxTopics,
     log: vlog,
   });
   vlog(`visual topics: ${topics.length}`);
   if (topics.length === 0) {
     return emptyResult(false);
   }
+  emit({ kind: "topics", total: topics.length });
 
-  const imageMeta: VisualImage[] = [];
+  const allFiles = await resolveVisualFiles(options, cwd);
   const warnings: string[] = [];
+  let done = 0;
 
-  for (const topic of topics) {
-    try {
-      const path = await renderTopic({
-        topic,
-        cwd,
-        outDir,
-        summary: options.summary,
-        diff: options.diff,
-        provider: options.provider,
-        modelCheap: options.modelCheap,
-        vlog,
-      });
-      if (path) {
-        imageMeta.push({ path, title: topic.title });
+  const rendered = await mapWithConcurrency(
+    topics,
+    options.concurrency ?? DEFAULT_VISUAL_CONCURRENCY,
+    async (topic): Promise<VisualImage | null> => {
+      try {
+        const path = await renderTopic({
+          topic,
+          cwd,
+          outDir,
+          theme,
+          summary: options.summary,
+          diff: options.diff,
+          provider: options.provider,
+          modelCheap: options.modelCheap,
+          allFiles,
+          vlog,
+          emit,
+        });
+        emit({
+          kind: "topic-done",
+          title: topic.title,
+          ok: path !== null,
+          done: ++done,
+          total: topics.length,
+        });
+        return path ? { path, title: topic.title } : null;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        warnings.push(`topic "${topic.title}": ${msg}`);
+        vlog(`topic failed: ${msg}`);
+        emit({
+          kind: "topic-done",
+          title: topic.title,
+          ok: false,
+          done: ++done,
+          total: topics.length,
+        });
+        return null;
       }
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      warnings.push(`topic "${topic.title}": ${msg}`);
-      vlog(`topic failed: ${msg}`);
-    }
-  }
+    },
+  );
+
+  const imageMeta = rendered.filter((img): img is VisualImage => img !== null);
 
   if (imageMeta.length === 0) {
     return {
@@ -138,19 +185,33 @@ export async function runVisualPipeline(
   };
 }
 
+async function resolveVisualFiles(
+  options: VisualPipelineOptions,
+  cwd: string,
+): Promise<VisualFile[]> {
+  if (options.visualFiles) return await options.visualFiles;
+  return gatherVisualFileContents(cwd, options.diff.files, options.diff.baseRef, {
+    mode: options.diff.mode,
+  });
+}
+
 async function renderTopic(options: {
   topic: VisualTopic;
   cwd: string;
   outDir: string;
+  theme: Theme;
   summary: ChangeSummary;
   diff: GatherDiffResult;
   provider: Provider;
   modelCheap?: string;
+  allFiles: VisualFile[];
   vlog: (msg: string) => void;
+  emit: (event: VisualProgress) => void;
 }): Promise<string | null> {
-  const { topic, cwd, outDir, provider, modelCheap, vlog } = options;
+  const { topic, outDir, theme, provider, modelCheap, vlog, emit } = options;
   const prefix = `visual-${topic.id}-`;
   const stem = `visual-${topic.id}`;
+  const outPng = join(outDir, `${stem}.png`);
   const topicSummary = scopeSummary(options.summary, topic);
   const topicFiles = filterDiffFiles(options.diff.files, topic.files);
 
@@ -161,47 +222,33 @@ async function renderTopic(options: {
   vlog(`visual gate [${topic.id} ${topic.title}]: ${gate}`);
   if (gate === "none") return null;
 
+  emit({ kind: "topic-start", title: topic.title, mode: gate });
+
   if (gate === "mockup") {
-    const files = await gatherVisualFileContents(
-      cwd,
-      topicFiles.length > 0 ? topicFiles : options.diff.files,
-      options.diff.baseRef,
-    );
+    const scoped = filterVisualFiles(options.allFiles, topic.files);
     const mockup = await generateMockup({
       provider,
       summary: topicSummary,
-      files,
+      files: scoped.length > 0 ? scoped : options.allFiles,
       outDir,
+      theme,
+      title: topic.title,
       model: modelCheap,
       log: vlog,
       filePrefix: prefix,
     });
     if (mockup.feasible) {
-      const beforePng = join(outDir, `${prefix}before.png`);
-      const afterPng = join(outDir, `${prefix}after.png`);
-      const vp = clampViewport(mockup.viewport);
+      emit({ kind: "topic-shot", title: topic.title });
       await screenshotHtml({
-        url: pathToFileURL(mockup.beforePath).href,
-        outPath: beforePng,
-        width: vp.width,
-        height: vp.height,
+        url: pathToFileURL(mockup.htmlPath).href,
+        outPath: outPng,
+        width: DEFAULT_VIEWPORT.width,
+        height: DEFAULT_VIEWPORT.height,
       });
-      await screenshotHtml({
-        url: pathToFileURL(mockup.afterPath).href,
-        outPath: afterPng,
-        width: vp.width,
-        height: vp.height,
-      });
-      return composeBeforeAfter({
-        cwd,
-        outDir,
-        beforePath: beforePng,
-        afterPath: afterPng,
-        badge: "generated preview",
-        outFileName: `${stem}.png`,
-      });
+      return outPng;
     }
     vlog(`mockup infeasible [${topic.id}]: ${mockup.reason}; trying diagram`);
+    emit({ kind: "topic-fallback", title: topic.title });
   }
 
   const diagram = await generateDiagram({
@@ -209,6 +256,8 @@ async function renderTopic(options: {
     summary: topicSummary,
     diffText: scopeDiffText(options.diff.diffText, topic.files),
     outDir,
+    theme,
+    title: topic.title,
     model: modelCheap,
     log: vlog,
     filePrefix: prefix,
@@ -217,7 +266,7 @@ async function renderTopic(options: {
     vlog(`diagram infeasible [${topic.id}]: ${diagram.reason}`);
     return null;
   }
-  const outPng = join(outDir, `${stem}.png`);
+  emit({ kind: "topic-shot", title: topic.title });
   await screenshotHtml({
     url: pathToFileURL(diagram.htmlPath).href,
     outPath: outPng,
@@ -236,19 +285,33 @@ function scopeSummary(
     headline: topic.title.slice(0, 140),
     overview: topic.items.map((i) => i.description).join(" "),
     items: topic.items,
+    visual_topics: undefined,
   };
 }
 
 function filterDiffFiles(files: DiffFile[], topicFiles: string[]): DiffFile[] {
   if (topicFiles.length === 0) return files;
-  const set = new Set(topicFiles.map((f) => f.replaceAll("\\", "/")));
-  return files.filter((f) => set.has(f.path.replaceAll("\\", "/")));
+  const set = new Set(topicFiles.map(normalizePath));
+  return files.filter((f) => set.has(normalizePath(f.path)));
+}
+
+function filterVisualFiles(
+  files: VisualFile[],
+  topicFiles: string[],
+): VisualFile[] {
+  if (topicFiles.length === 0) return files;
+  const set = new Set(topicFiles.map(normalizePath));
+  return files.filter((f) => set.has(normalizePath(f.path)));
+}
+
+function normalizePath(path: string): string {
+  return path.replaceAll("\\", "/");
 }
 
 function scopeDiffText(diffText: string, topicFiles: string[]): string {
   if (topicFiles.length === 0 || !diffText) return diffText;
   // Keep hunks whose path header mentions a topic file; else full diff.
-  const norms = topicFiles.map((f) => f.replaceAll("\\", "/"));
+  const norms = topicFiles.map(normalizePath);
   const parts = diffText.split(/(?=^diff --git )/m);
   const kept = parts.filter((p) =>
     norms.some((f) => p.includes(f) || p.includes(basename(f))),
