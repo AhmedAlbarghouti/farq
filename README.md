@@ -5,13 +5,13 @@
 One command. No servers. No API keys. Auth stays with your local `claude` or `opencode` CLI.
 
 ```bash
-npx @ahmedalbarghouti/farq@0.1.0 pr           # title + markdown body (+ image when feasible)
+npx @ahmedalbarghouti/farq@0.1.1 pr           # title + markdown body (+ image when feasible)
 npx farq slack              # Slack mrkdwn daily update
 npx farq json               # structured JSON
 npx farq pr --open          # fill PR template + create with gh
 ```
 
-> **0.1.0** — design-system visuals, lower latency, richer progress. CLI surface (`pr` / `slack` / `json`) is the stable bit.
+> **0.1.1** — `runFarq` composition root, visual-pipeline seam tests, Zod config. CLI surface (`pr` / `slack` / `json`) is the stable bit.
 
 ## Install
 
@@ -23,7 +23,7 @@ farq --help
 Or run without installing:
 
 ```bash
-npx @ahmedalbarghouti/farq@0.1.0 --help
+npx @ahmedalbarghouti/farq@0.1.1 --help
 ```
 
 Generated images land in a **user cache directory outside the repo** by default (no `.gitignore` change needed). Use `--out .farq` if you want them in-tree.
@@ -195,7 +195,7 @@ If a run still feels slow, the lever with the most travel is `--model-cheap` (fo
 
 - **CI** runs on every PR and on pushes to `main` (test + build + `--help` smoke).
 - **`main` is protected** — changes go through PRs; the `CI / test` check must pass.
-- **Releases** are tag-triggered: create `v0.1.1` (or later) after merge; the publish workflow needs a repo secret named `NPM_TOKEN` (npm automation/granular token with publish rights).
+- **Releases** are tag-triggered: after merge, tag `v0.1.1` (or later); the publish workflow needs a repo secret named `NPM_TOKEN` (npm automation/granular token with publish rights).
 - **`--open` image assets:** uploaded as `farq-assets-<branch>` prereleases; farq deletes orphaned tags whose branch no longer has an open PR.
 
 ## Roadmap
