@@ -2,8 +2,6 @@ import * as readline from "node:readline/promises";
 import type { ProviderName } from "../config.js";
 import { brand, muted } from "../ui/theme.js";
 
-const REAL_PROVIDERS: ProviderName[] = ["claude", "opencode"];
-
 /**
  * Ask which provider to use when both are installed.
  * Writes the prompt to stderr so stdout stays clean for the artifact.
@@ -38,8 +36,4 @@ export async function promptProviderChoice(
   } finally {
     rl.close();
   }
-}
-
-export function isRealProviderName(value: string): value is "claude" | "opencode" {
-  return (REAL_PROVIDERS as string[]).includes(value);
 }
