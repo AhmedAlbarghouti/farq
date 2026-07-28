@@ -58,14 +58,41 @@ describe("resolveProvider", () => {
     expect(p.name).toBe("opencode");
   });
 
-  it("prefers claude when both installed and nothing configured", async () => {
-    const logs: string[] = [];
+  it("prompts when both installed and interactive", async () => {
+    const choose = vi.fn(async () => "opencode" as const);
     const p = await resolveProvider({
       detect: async () => ({ claude: true, opencode: true }),
+      interactive: true,
+      choose,
+    });
+    expect(p.name).toBe("opencode");
+    expect(choose).toHaveBeenCalledOnce();
+  });
+
+  it("falls back to claude when both installed and non-interactive", async () => {
+    const logs: string[] = [];
+    const choose = vi.fn(async () => "opencode" as const);
+    const p = await resolveProvider({
+      detect: async () => ({ claude: true, opencode: true }),
+      interactive: false,
+      choose,
       log: (m) => logs.push(m),
     });
     expect(p.name).toBe("claude");
-    expect(logs[0]).toMatch(/Both claude and opencode/);
+    expect(choose).not.toHaveBeenCalled();
+    expect(logs[0]).toMatch(/non-interactive/);
+  });
+
+  it("skips the picker when config sets a default", async () => {
+    const choose = vi.fn(async () => "claude" as const);
+    const p = await resolveProvider({
+      config: { provider: "opencode" },
+      detect: async () => ({ claude: true, opencode: true }),
+      interactive: true,
+      choose,
+    });
+    expect(p.name).toBe("opencode");
+    expect(choose).not.toHaveBeenCalled();
   });
 
   it("errors with install hint when none installed", async () => {
