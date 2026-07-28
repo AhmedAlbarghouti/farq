@@ -1,4 +1,6 @@
 import type { FarqConfig, ProviderName } from "../config.js";
+import { isInteractive } from "../ui/theme.js";
+import { promptProviderChoice } from "./choose.js";
 import * as claude from "./claude.js";
 import * as opencode from "./opencode.js";
 import * as fake from "./fake.js";
@@ -14,6 +16,10 @@ export type ResolveProviderOptions = {
   config?: FarqConfig;
   detect?: () => Promise<{ claude: boolean; opencode: boolean }>;
   log?: (msg: string) => void;
+  /** Override TTY detection (tests). */
+  interactive?: boolean;
+  /** Override the interactive picker (tests). */
+  choose?: () => Promise<"claude" | "opencode">;
 };
 
 export async function detectProviders(): Promise<{
@@ -40,8 +46,13 @@ export async function resolveProvider(
     : await detectProviders();
 
   if (detected.claude && detected.opencode) {
+    const interactive = options.interactive ?? isInteractive();
+    if (interactive) {
+      const choose = options.choose ?? promptProviderChoice;
+      return getProvider(await choose());
+    }
     options.log?.(
-      "Both claude and opencode found — using claude. Set provider in ~/.config/farq/config.json or pass --provider to override.",
+      "Both claude and opencode found — using claude (non-interactive). Set provider in ~/.config/farq/config.json or pass --provider to choose.",
     );
     return getProvider("claude");
   }

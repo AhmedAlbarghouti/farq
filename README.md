@@ -5,13 +5,13 @@
 One command. No servers. No API keys. Auth stays with your local `claude` or `opencode` CLI.
 
 ```bash
-npx @ahmedalbarghouti/farq@0.1.1 pr           # title + markdown body (+ image when feasible)
+npx @ahmedalbarghouti/farq@0.1.2 pr           # title + markdown body (+ image when feasible)
 npx farq slack              # Slack mrkdwn daily update
 npx farq json               # structured JSON
 npx farq pr --open          # fill PR template + create with gh
 ```
 
-> **0.1.1** — `runFarq` composition root, visual-pipeline seam tests, Zod config. CLI surface (`pr` / `slack` / `json`) is the stable bit.
+> **0.1.2** — GitHub Release on tag publish; interactive provider picker when both CLIs are installed. CLI surface (`pr` / `slack` / `json`) is the stable bit.
 
 ## Install
 
@@ -23,7 +23,7 @@ farq --help
 Or run without installing:
 
 ```bash
-npx @ahmedalbarghouti/farq@0.1.1 --help
+npx @ahmedalbarghouti/farq@0.1.2 --help
 ```
 
 Generated images land in a **user cache directory outside the repo** by default (no `.gitignore` change needed). Use `--out .farq` if you want them in-tree.
@@ -137,7 +137,7 @@ Precedence: **flags → project → global**.
 
 `visual.maxTopics` caps how many images a run may generate (each costs one model call), and `visual.concurrency` is how many are generated at once. `visual.fontImport` can point at a webfont stylesheet; leaving it unset keeps rendering offline and fast.
 
-If both `claude` and `opencode` are installed and nothing is configured, farq uses **claude** and prints how to override (no interactive prompt).
+If both `claude` and `opencode` are installed and no default is set (`provider` in config or `--provider`), farq **asks which to use** in an interactive terminal. Non-interactive runs (CI, pipes) fall back to **claude** and print how to set a default.
 
 ## Flags
 
@@ -195,7 +195,7 @@ If a run still feels slow, the lever with the most travel is `--model-cheap` (fo
 
 - **CI** runs on every PR and on pushes to `main` (test + build + `--help` smoke).
 - **`main` is protected** — changes go through PRs; the `CI / test` check must pass.
-- **Releases** are tag-triggered: after merge, tag `v0.1.1` (or later); the publish workflow needs a repo secret named `NPM_TOKEN` (npm automation/granular token with publish rights).
+- **Releases** are tag-triggered: after merge, tag `v0.1.2` (or later). The publish workflow runs tests, `npm publish`, then creates the GitHub Release (`--generate-notes`). Needs repo secret `NPM_TOKEN`.
 - **`--open` image assets:** uploaded as `farq-assets-<branch>` prereleases; farq deletes orphaned tags whose branch no longer has an open PR.
 
 ## Roadmap

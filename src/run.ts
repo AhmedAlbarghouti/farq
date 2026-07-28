@@ -6,7 +6,10 @@ import {
   type ToneName,
 } from "./config.js";
 import { gatherDiff, gatherVisualFileContents, type VisualFile } from "./git.js";
-import { resolveProvider } from "./providers/index.js";
+import {
+  detectProviders,
+  resolveProvider,
+} from "./providers/index.js";
 import { summarize } from "./summarize.js";
 import { inferTitleConvention } from "./title.js";
 import { fetchRecentPrTitles, openPullRequest } from "./open-pr.js";
@@ -97,17 +100,15 @@ export async function runFarq(options: RunFarqOptions): Promise<number> {
 
   ui.plan(2 + (willVisual ? 1 : 0) + (type === "pr" && opts.open ? 1 : 0));
 
-  // Provider detection, the diff and the `gh` title lookup are independent —
-  // start them together so the first model call is not waiting on subprocesses.
+  // Diff gather and provider detection are independent. Defer the interactive
+  // provider picker until after the diff stage so it does not fight the spinner.
   const providerNotes: string[] = [];
-  const providerPromise = resolveProvider({
-    flag: config.provider,
-    config,
-    log: (msg) => providerNotes.push(msg),
-  }).then(
-    (value) => ({ ok: true as const, value }),
-    (error: unknown) => ({ ok: false as const, error }),
-  );
+  const detectPromise = config.provider
+    ? null
+    : detectProviders().then(
+        (value) => ({ ok: true as const, value }),
+        (error: unknown) => ({ ok: false as const, error }),
+      );
   const titlesPromise =
     type === "pr" ? fetchRecentPrTitles(cwd).catch(() => []) : null;
 
@@ -122,17 +123,23 @@ export async function runFarq(options: RunFarqOptions): Promise<number> {
     return 1;
   }
 
-  const resolved = await providerPromise;
-  for (const note of providerNotes) ui.note(note);
-  if (!resolved.ok) {
-    ui.error(
-      resolved.error instanceof Error
-        ? resolved.error.message
-        : String(resolved.error),
-    );
+  let provider;
+  try {
+    const detected = detectPromise ? await detectPromise : null;
+    if (detected && !detected.ok) {
+      throw detected.error;
+    }
+    provider = await resolveProvider({
+      flag: config.provider,
+      config,
+      detect: detected ? async () => detected.value : undefined,
+      log: (msg) => providerNotes.push(msg),
+    });
+  } catch (err) {
+    ui.error(err instanceof Error ? err.message : String(err));
     return 1;
   }
-  const provider = resolved.value;
+  for (const note of providerNotes) ui.note(note);
 
   // Read the before/after file bodies while the model writes the summary.
   const visualFiles: Promise<VisualFile[]> | undefined =
