@@ -33,7 +33,7 @@ describe("fillPrTemplate", () => {
       template: null,
       summary: FAKE_SUMMARY,
       bodyMarkdown: "### Before / After\n\n![x](.farq/before-after.png)\n",
-      imageUrl: "https://example.com/a.png",
+      images: [{ url: "https://example.com/a.png" }],
     });
     expect(body).toContain("https://example.com/a.png");
   });
@@ -44,7 +44,7 @@ describe("fillPrTemplate", () => {
       summary: FAKE_SUMMARY,
       bodyMarkdown:
         "### Before / After\n\n![x](.farq/before-after.png)\n\n_Local image path - attach the file when pasting into GitHub if it does not render._\n\n### Changes\n",
-      imageUrl: "https://github.com/x/y/releases/download/t/a.png",
+      images: [{ url: "https://github.com/x/y/releases/download/t/a.png" }],
     });
     expect(body).toContain("https://github.com/x/y/releases/download/t/a.png");
     expect(body).not.toContain("Local image path");
@@ -56,7 +56,7 @@ describe("fillPrTemplate", () => {
       summary: FAKE_SUMMARY,
       bodyMarkdown:
         "### Before / After\n\n![x](C:\\Users\\me\\AppData\\Local\\farq\\cache\\abc\\before-after.png)\n",
-      imageUrl: "https://example.com/a.png",
+      images: [{ url: "https://example.com/a.png" }],
     });
     expect(body).toContain("https://example.com/a.png");
     expect(body).not.toContain("AppData");

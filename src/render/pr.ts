@@ -20,9 +20,6 @@ export type PrImage = {
 
 export type RenderPrOptions = {
   summary: ChangeSummary;
-  /** @deprecated prefer images */
-  imagePath?: string | null;
-  imageAlt?: string;
   images?: PrImage[];
 };
 
@@ -39,14 +36,14 @@ export function renderPr(options: RenderPrOptions): string {
     out.push(overflow);
   }
 
-  const images = normalizeImages(options);
+  const images = options.images ?? [];
   if (images.length > 0) {
     const anyLocal = images.some((img) => !isHostedImageUrl(img.path));
     if (images.length === 1) {
       out.push("");
       out.push("### Before / After");
       out.push("");
-      const alt = images[0]!.title ?? options.imageAlt ?? "before / after";
+      const alt = images[0]!.title ?? "before / after";
       out.push(`![${alt}](${images[0]!.path})`);
     } else {
       out.push("");
@@ -86,12 +83,4 @@ export function renderPr(options: RenderPrOptions): string {
   }
 
   return `${title}\n\n${out.join("\n").trim()}\n`;
-}
-
-function normalizeImages(options: RenderPrOptions): PrImage[] {
-  if (options.images && options.images.length > 0) return options.images;
-  if (options.imagePath) {
-    return [{ path: options.imagePath, title: options.imageAlt }];
-  }
-  return [];
 }

@@ -28,8 +28,6 @@ export function fillPrTemplate(options: {
   template: string | null;
   summary: ChangeSummary;
   bodyMarkdown: string;
-  /** @deprecated prefer images */
-  imageUrl?: string | null;
   images?: TemplateImage[];
 }): { title: string; body: string } {
   const { title, overflow } = truncateTitle(
@@ -37,7 +35,7 @@ export function fillPrTemplate(options: {
     GITHUB_TITLE_MAX,
   );
 
-  const images = normalizeTemplateImages(options);
+  const images = options.images ?? [];
 
   let body = options.template?.trim() || "";
   if (!body) {
@@ -81,15 +79,6 @@ export function fillPrTemplate(options: {
   }
 
   return { title, body };
-}
-
-function normalizeTemplateImages(options: {
-  imageUrl?: string | null;
-  images?: TemplateImage[];
-}): TemplateImage[] {
-  if (options.images && options.images.length > 0) return options.images;
-  if (options.imageUrl) return [{ url: options.imageUrl }];
-  return [];
 }
 
 function hasMarkdownImage(body: string): boolean {

@@ -8,7 +8,7 @@ describe("renderers", () => {
   it("pr puts title on first line and can embed image", () => {
     const out = renderPr({
       summary: FAKE_SUMMARY,
-      imagePath: ".farq/before-after.png",
+      images: [{ path: ".farq/before-after.png" }],
     });
     const first = out.split("\n")[0];
     expect(first).toBe(FAKE_SUMMARY.headline);
@@ -20,7 +20,7 @@ describe("renderers", () => {
   it("pr omits local-path note when image is a hosted URL", () => {
     const out = renderPr({
       summary: FAKE_SUMMARY,
-      imagePath: "https://example.com/before-after.png",
+      images: [{ path: "https://example.com/before-after.png" }],
     });
     expect(out).toContain("](https://example.com/before-after.png)");
     expect(out).not.toContain("Local image path");

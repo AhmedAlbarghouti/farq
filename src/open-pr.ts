@@ -17,7 +17,6 @@ export type OpenPrResult =
       warning?: string;
       title: string;
       body: string;
-      imageUrl?: string | null;
       imageUrls?: string[];
     };
 
@@ -123,11 +122,29 @@ export async function findExistingPr(
   }
 }
 
+/**
+ * Publish HEAD to origin (set upstream if missing). Required before
+ * `gh pr create` when the branch only exists locally.
+ */
+export async function pushCurrentBranch(cwd: string): Promise<void> {
+  try {
+    await execa("git", ["push", "-u", "origin", "HEAD"], {
+      cwd,
+      timeout: 120_000,
+      reject: true,
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new Error(
+      `git push failed — push the branch manually, then retry: ${msg}`,
+    );
+  }
+}
+
 export async function openPullRequest(options: {
   cwd: string;
   summary: ChangeSummary;
   bodyMarkdown: string;
-  imagePath?: string | null;
   imagePaths?: string[];
   imageTitles?: string[];
 }): Promise<OpenPrResult> {
@@ -142,12 +159,9 @@ export async function openPullRequest(options: {
     };
   }
 
-  const paths =
-    options.imagePaths && options.imagePaths.length > 0
-      ? options.imagePaths
-      : options.imagePath
-        ? [options.imagePath]
-        : [];
+  await pushCurrentBranch(cwd);
+
+  const paths = options.imagePaths ?? [];
 
   let imageUrls: string[] = [];
   let warning: string | undefined;
@@ -167,7 +181,6 @@ export async function openPullRequest(options: {
     template,
     summary: options.summary,
     bodyMarkdown: options.bodyMarkdown,
-    imageUrl: imageUrls[0] ?? null,
     images: imageUrls.map((url, i) => ({
       url,
       title: options.imageTitles?.[i],
@@ -202,7 +215,6 @@ export async function openPullRequest(options: {
         warning,
         title,
         body,
-        imageUrl: imageUrls[0] ?? null,
         imageUrls,
       };
     }
@@ -227,7 +239,6 @@ export async function openPullRequest(options: {
       warning,
       title,
       body,
-      imageUrl: imageUrls[0] ?? null,
       imageUrls,
     };
   } catch (err) {
@@ -298,18 +309,6 @@ export async function pruneOrphanedFarqAssets(
     // best-effort — never fail --open for prune
   }
   return deleted;
-}
-
-/** Best-effort: prerelease asset URL for one PNG. */
-export async function uploadPrImage(
-  cwd: string,
-  imagePath: string,
-  branch: string,
-): Promise<string> {
-  const urls = await uploadPrImages(cwd, [imagePath], branch);
-  const url = urls[0];
-  if (!url) throw new Error("no asset URL returned");
-  return url;
 }
 
 /** Best-effort: upload many PNGs to one prerelease; URLs in input order. */
