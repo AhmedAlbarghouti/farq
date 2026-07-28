@@ -24,7 +24,6 @@ export type VisualImage = {
 };
 
 export type VisualPipelineResult = {
-  imagePath: string | null;
   images: string[];
   imageMeta: VisualImage[];
   softDegraded: boolean;
@@ -177,7 +176,6 @@ export async function runVisualPipeline(
   }
 
   return {
-    imagePath: imageMeta[0]!.path,
     images: imageMeta.map((i) => i.path),
     imageMeta,
     softDegraded: warnings.length > 0,
@@ -321,7 +319,6 @@ function scopeDiffText(diffText: string, topicFiles: string[]): string {
 
 function emptyResult(soft: boolean): VisualPipelineResult {
   return {
-    imagePath: null,
     images: [],
     imageMeta: [],
     softDegraded: soft,
@@ -330,7 +327,6 @@ function emptyResult(soft: boolean): VisualPipelineResult {
 
 function singleResult(path: string, title: string): VisualPipelineResult {
   return {
-    imagePath: path,
     images: [path],
     imageMeta: [{ path, title }],
     softDegraded: false,

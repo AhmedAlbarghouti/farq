@@ -83,6 +83,7 @@ describe("openPullRequest", () => {
       expect(result.action).toBe("updated");
       expect(result.url).toContain("/pull/2");
     }
+    expect(calls.some((c) => c.includes("git push -u origin HEAD"))).toBe(true);
     expect(calls.some((c) => c.includes("pr edit 2"))).toBe(true);
     expect(calls.some((c) => c.includes("pr create"))).toBe(false);
   });
@@ -121,7 +122,31 @@ describe("openPullRequest", () => {
       expect(result.action).toBe("created");
       expect(result.url).toContain("/pull/9");
     }
+    expect(calls.some((c) => c.includes("git push -u origin HEAD"))).toBe(true);
     expect(calls.some((c) => c.includes("pr create"))).toBe(true);
     expect(calls.some((c) => c.includes("pr edit"))).toBe(false);
+  });
+
+  it("fails clearly when git push fails", async () => {
+    mocked.mockImplementation(async (cmd: string, args: string[] = []) => {
+      if (cmd === "git" && args[0] === "rev-parse") {
+        return { stdout: "feature" } as never;
+      }
+      if (cmd === "gh" && args.includes("defaultBranchRef")) {
+        return { stdout: "main" } as never;
+      }
+      if (cmd === "git" && args[0] === "push") {
+        throw new Error("Permission denied");
+      }
+      return { stdout: "", exitCode: 0 } as never;
+    });
+
+    await expect(
+      openPullRequest({
+        cwd: process.cwd(),
+        summary: FAKE_SUMMARY,
+        bodyMarkdown: "body",
+      }),
+    ).rejects.toThrow(/git push failed/);
   });
 });

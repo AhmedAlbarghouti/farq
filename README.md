@@ -5,13 +5,13 @@
 One command. No servers. No API keys. Auth stays with your local `claude` or `opencode` CLI.
 
 ```bash
-npx @ahmedalbarghouti/farq@0.0.3 pr           # title + markdown body (+ image when feasible)
+npx @ahmedalbarghouti/farq@0.1.0 pr           # title + markdown body (+ image when feasible)
 npx farq slack              # Slack mrkdwn daily update
 npx farq json               # structured JSON
 npx farq pr --open          # fill PR template + create with gh
 ```
 
-> **0.0.3** — PATH/`gh`/Chrome resolution, hosted-image PR body cleanup, orphaned asset prune. CLI surface (`pr` / `slack` / `json`) is the stable bit.
+> **0.1.0** — design-system visuals, lower latency, richer progress. CLI surface (`pr` / `slack` / `json`) is the stable bit.
 
 ## Install
 
@@ -23,7 +23,7 @@ farq --help
 Or run without installing:
 
 ```bash
-npx @ahmedalbarghouti/farq@0.0.3 --help
+npx @ahmedalbarghouti/farq@0.1.0 --help
 ```
 
 Generated images land in a **user cache directory outside the repo** by default (no `.gitignore` change needed). Use `--out .farq` if you want them in-tree.
@@ -74,10 +74,11 @@ farq pr --open
 
 **`--open`** (feature branches only):
 
-1. Reads `.github` PR template if present and fills known sections  
-2. Infers title style from recent merged PR titles when `gh` works  
-3. Best-effort uploads composed image(s) as prerelease assets and embeds the URL(s)  
-4. Creates the PR with `gh pr create`, or **updates** title/body with `gh pr edit` if one already exists for the branch, then opens it in the browser  
+1. Pushes the current branch to `origin` (`git push -u origin HEAD`) if needed  
+2. Reads `.github` PR template if present and fills known sections  
+3. Infers title style from recent merged PR titles when `gh` works  
+4. Best-effort uploads composed image(s) as prerelease assets and embeds the URL(s)  
+5. Creates the PR with `gh pr create`, or **updates** title/body with `gh pr edit` if one already exists for the branch, then opens it in the browser  
 
 On the default branch (`main` / `master` / repo default), `--open` skips create and still prints the artifact. Titles are capped at GitHub's **256** character limit (overflow goes into the body).
 
@@ -194,7 +195,7 @@ If a run still feels slow, the lever with the most travel is `--model-cheap` (fo
 
 - **CI** runs on every PR and on pushes to `main` (test + build + `--help` smoke).
 - **`main` is protected** — changes go through PRs; the `CI / test` check must pass.
-- **Releases** are tag-triggered: create `v0.0.3` (or later) after merge; the publish workflow needs a repo secret named `NPM_TOKEN` (npm automation/granular token with publish rights).
+- **Releases** are tag-triggered: create `v0.1.1` (or later) after merge; the publish workflow needs a repo secret named `NPM_TOKEN` (npm automation/granular token with publish rights).
 - **`--open` image assets:** uploaded as `farq-assets-<branch>` prereleases; farq deletes orphaned tags whose branch no longer has an open PR.
 
 ## Roadmap

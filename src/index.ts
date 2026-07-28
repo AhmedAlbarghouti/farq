@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { createRequire } from "node:module";
 import { Command } from "commander";
 import {
   loadConfig,
@@ -24,6 +25,10 @@ import { renderSlack } from "./render/slack.js";
 import { renderJson } from "./render/json.js";
 import { createUi, linesFor } from "./ui/index.js";
 import { defaultOutDir, displayImageRef } from "./paths.js";
+
+const { version: PACKAGE_VERSION } = createRequire(import.meta.url)(
+  "../package.json",
+) as { version: string };
 
 type OutputType = "pr" | "slack" | "json";
 
@@ -155,7 +160,6 @@ async function run(type: OutputType, opts: SharedOpts): Promise<number> {
         ? config.models?.opencodeCheap ?? process.env.FARQ_OPENCODE_MODEL
         : undefined;
 
-  let imagePath: string | null = null;
   let images: string[] = [];
   let imageMeta: Array<{ path: string; title: string }> = [];
 
@@ -219,13 +223,12 @@ async function run(type: OutputType, opts: SharedOpts): Promise<number> {
         log: opts.verbose ? (msg) => ui.note(msg) : () => undefined,
         onProgress,
       });
-      imagePath = visual.imagePath;
       images = visual.images;
       imageMeta = visual.imageMeta;
       if (visual.warning && images.length === 0) {
         visSpin.succeed("visuals skipped");
         ui.note(visual.warning);
-      } else if (imagePath) {
+      } else if (images.length > 0) {
         visSpin.succeed(
           `${images.length} visual${images.length === 1 ? "" : "s"} ready`,
         );
@@ -269,7 +272,6 @@ async function run(type: OutputType, opts: SharedOpts): Promise<number> {
         bodyMarkdown: artifact.includes("\n\n")
           ? artifact.split("\n\n").slice(1).join("\n\n")
           : artifact,
-        imagePath,
         imagePaths: images,
         imageTitles: imageMeta.map((m) => m.title),
       });
@@ -326,7 +328,7 @@ async function main() {
     .description(
       "Turn git branch changes into paste-ready PR/Slack updates with optional before/after visuals",
     )
-    .version("0.0.3");
+    .version(PACKAGE_VERSION);
 
   addShared(
     program
