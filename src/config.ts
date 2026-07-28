@@ -1,11 +1,60 @@
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { z } from "zod";
 
-import { isThemeName, type ThemeName } from "./visual/design.js";
+import { THEME_NAMES, type ThemeName } from "./visual/design.js";
 
 export type ProviderName = "claude" | "opencode" | "fake";
 export type ToneName = "technical" | "client";
+
+const PROVIDERS = ["claude", "opencode", "fake"] as const;
+const TONES = ["technical", "client"] as const;
+
+/** Optional string: trim, require non-empty, else drop the field. */
+const optionalTrimmedString = z
+  .string()
+  .trim()
+  .min(1)
+  .optional()
+  .catch(undefined);
+
+/** Optional positive int (floored); invalid values are dropped. */
+const optionalPositiveInt = z
+  .number()
+  .finite()
+  .gte(1)
+  .transform((n) => Math.floor(n))
+  .optional()
+  .catch(undefined);
+
+export const VisualConfigSchema = z
+  .object({
+    theme: z.enum(THEME_NAMES).optional().catch(undefined),
+    accent: optionalTrimmedString,
+    fontImport: optionalTrimmedString,
+    fontSans: optionalTrimmedString,
+    fontDisplay: optionalTrimmedString,
+    maxTopics: optionalPositiveInt,
+    concurrency: optionalPositiveInt,
+  })
+  .strip();
+
+export const FarqConfigSchema = z
+  .object({
+    provider: z.enum(PROVIDERS).optional().catch(undefined),
+    tone: z.enum(TONES).optional().catch(undefined),
+    models: z
+      .object({
+        claudeCheap: optionalTrimmedString,
+        opencodeCheap: optionalTrimmedString,
+      })
+      .strip()
+      .optional()
+      .catch(undefined),
+    visual: VisualConfigSchema.optional().catch(undefined),
+  })
+  .strip();
 
 export type VisualConfig = {
   /** Palette used by every generated mockup and diagram. */
@@ -89,49 +138,30 @@ function readJsonFile(path: string): FarqConfig | null {
   if (!existsSync(path)) return null;
   try {
     const raw = readFileSync(path, "utf8");
-    const data = JSON.parse(raw) as FarqConfig;
-    return sanitize(data);
+    return sanitize(JSON.parse(raw));
   } catch {
     return null;
   }
 }
 
-function sanitize(data: FarqConfig): FarqConfig {
+/** Parse unknown JSON into a FarqConfig, dropping invalid fields. */
+export function sanitize(data: unknown): FarqConfig {
+  const parsed = FarqConfigSchema.safeParse(data ?? {});
+  if (!parsed.success) return {};
+
   const out: FarqConfig = {};
-  if (
-    data.provider === "claude" ||
-    data.provider === "opencode" ||
-    data.provider === "fake"
-  ) {
-    out.provider = data.provider;
-  }
-  if (data.tone === "technical" || data.tone === "client") {
-    out.tone = data.tone;
-  }
-  if (data.models && typeof data.models === "object") {
-    const models: NonNullable<FarqConfig["models"]> = {};
-    if (typeof data.models.claudeCheap === "string") {
-      models.claudeCheap = data.models.claudeCheap;
-    }
-    if (typeof data.models.opencodeCheap === "string") {
-      models.opencodeCheap = data.models.opencodeCheap;
-    }
+  if (parsed.data.provider !== undefined) out.provider = parsed.data.provider;
+  if (parsed.data.tone !== undefined) out.tone = parsed.data.tone;
+
+  if (parsed.data.models) {
+    const models = stripUndefined(parsed.data.models);
     if (Object.keys(models).length > 0) out.models = models;
   }
-  if (data.visual && typeof data.visual === "object") {
-    const visual: VisualConfig = {};
-    if (isThemeName(data.visual.theme)) visual.theme = data.visual.theme;
-    for (const key of ["accent", "fontImport", "fontSans", "fontDisplay"] as const) {
-      const value = data.visual[key];
-      if (typeof value === "string" && value.trim()) visual[key] = value.trim();
-    }
-    for (const key of ["maxTopics", "concurrency"] as const) {
-      const value = data.visual[key];
-      if (typeof value === "number" && Number.isFinite(value) && value >= 1) {
-        visual[key] = Math.floor(value);
-      }
-    }
+
+  if (parsed.data.visual) {
+    const visual = stripUndefined(parsed.data.visual) as VisualConfig;
     if (Object.keys(visual).length > 0) out.visual = visual;
   }
+
   return out;
 }

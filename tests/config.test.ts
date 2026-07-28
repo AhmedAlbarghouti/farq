@@ -2,7 +2,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it } from "vitest";
-import { loadConfig, mergeConfig } from "../src/config.js";
+import { loadConfig, mergeConfig, sanitize } from "../src/config.js";
 
 const dirs: string[] = [];
 
@@ -94,5 +94,36 @@ describe("mergeConfig", () => {
       tone: "client",
       models: { claudeCheap: "haiku" },
     });
+  });
+});
+
+describe("sanitize (Zod)", () => {
+  it("keeps valid fields and drops invalid ones", () => {
+    expect(
+      sanitize({
+        provider: "nope",
+        tone: "client",
+        visual: {
+          theme: "midnight",
+          accent: "  #0af  ",
+          maxTopics: 2.9,
+          concurrency: 0,
+          unknown: true,
+        },
+        extra: 1,
+      }),
+    ).toEqual({
+      tone: "client",
+      visual: {
+        theme: "midnight",
+        accent: "#0af",
+        maxTopics: 2,
+      },
+    });
+  });
+
+  it("returns empty object for non-objects", () => {
+    expect(sanitize(null)).toEqual({});
+    expect(sanitize("x")).toEqual({});
   });
 });
